@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: sample-app
-          image: ${ECR_REGISTRY}/sample-app:${BUILD_NUMBER}
+          image: IMAGE_URI
           ports:
             - containerPort: 8080
           resources:
