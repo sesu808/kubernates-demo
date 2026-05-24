@@ -6,7 +6,7 @@ pipeline {
         ECR_REGISTRY    = '624858524005.dkr.ecr.ap-south-1.amazonaws.com'
         ECR_REPO        = 'sample-app'
         EKS_CLUSTER     = 'sample-eks'
-        K8S_NAMESPACE   = 'default'
+        K8S_NAMESPACE   = 'prabhas'
         HELM_RELEASE    = 'sample-app'
         HELM_CHART_PATH = './helm/sample-app'
     }

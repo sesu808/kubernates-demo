@@ -15,4 +15,4 @@ ingress:
 
 resources: {}
 
-namespace: default
+namespace: prabhas
