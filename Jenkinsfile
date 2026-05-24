@@ -1,19 +1,17 @@
 pipeline {
     agent any
-
     environment {
-        AWS_REGION = 'ap-south-1'
-        AWS_ACCOUNT_ID = '624858524005'
-
-        ECR_REGISTRY = '624858524005.dkr.ecr.ap-south-1.amazonaws.com'
-        ECR_REPO = 'sample-app'
-
-        EKS_CLUSTER = 'sample-eks'
-        K8S_NAMESPACE = 'default'
+        AWS_REGION      = 'ap-south-1'
+        AWS_ACCOUNT_ID  = '624858524005'
+        ECR_REGISTRY    = '624858524005.dkr.ecr.ap-south-1.amazonaws.com'
+        ECR_REPO        = 'sample-app'
+        EKS_CLUSTER     = 'sample-eks'
+        K8S_NAMESPACE   = 'default'
+        HELM_RELEASE    = 'sample-app'
+        HELM_CHART_PATH = './helm/sample-app'        // path to your helm chart
+        IMAGE_TAG       = "${BUILD_NUMBER}"
     }
-
     stages {
-
         stage('Checkout Code') {
             steps {
                 checkout scm
@@ -24,13 +22,8 @@ pipeline {
             steps {
                 dir('app') {
                     sh """
-                        docker build -t ${ECR_REPO}:${BUILD_NUMBER} .
-
-                        docker tag ${ECR_REPO}:${BUILD_NUMBER} \
-                        ${ECR_REGISTRY}/${ECR_REPO}:${BUILD_NUMBER}
-
-                        docker tag ${ECR_REPO}:${BUILD_NUMBER} \
-                        ${ECR_REGISTRY}/${ECR_REPO}:latest
+                        docker build -t ${ECR_REPO}:${IMAGE_TAG} .
+                        docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}
                     """
                 }
             }
@@ -48,65 +41,67 @@ pipeline {
         stage('Push Docker Image to ECR') {
             steps {
                 sh """
-                    docker push ${ECR_REGISTRY}/${ECR_REPO}:${BUILD_NUMBER}
-
-                    docker push ${ECR_REGISTRY}/${ECR_REPO}:latest
+                    docker push ${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}
                 """
             }
         }
 
-        stage('Deploy to EKS Cluster') {
+        stage('Deploy to EKS via Helm') {
             steps {
                 sh """
                     aws eks update-kubeconfig \
-                    --region ${AWS_REGION} \
-                    --name ${EKS_CLUSTER}
+                        --region ${AWS_REGION} \
+                        --name ${EKS_CLUSTER}
 
-                    sed -i "s|IMAGE_URI|${ECR_REGISTRY}/${ECR_REPO}:${BUILD_NUMBER}|g" \
-                    k8s/deployment.yaml
-
-                    kubectl apply -f k8s/
-
-                    kubectl rollout status deployment/sample-app \
-                    -n ${K8S_NAMESPACE} --timeout=120s
+                    helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
+                        --namespace ${K8S_NAMESPACE} \
+                        --create-namespace \
+                        --set image.repository=${ECR_REGISTRY}/${ECR_REPO} \
+                        --set image.tag=${IMAGE_TAG} \
+                        --set image.pullPolicy=IfNotPresent \
+                        --wait \
+                        --timeout 2m \
+                        --atomic
                 """
             }
         }
 
-        stage('Verify Kubernetes Deployment') {
+        stage('Verify Deployment') {
             steps {
                 sh """
-                    echo "Deployments:"
+                    echo "==> Helm Release Status:"
+                    helm status ${HELM_RELEASE} -n ${K8S_NAMESPACE}
+
+                    echo "==> Helm History (versions):"
+                    helm history ${HELM_RELEASE} -n ${K8S_NAMESPACE}
+
+                    echo "==> Deployments:"
                     kubectl get deployments -n ${K8S_NAMESPACE}
 
-                    echo "\\nPods:"
+                    echo "==> Pods:"
                     kubectl get pods -n ${K8S_NAMESPACE}
 
-                    echo "\\nServices:"
+                    echo "==> Services:"
                     kubectl get svc -n ${K8S_NAMESPACE}
-
-                    echo "\\nIngress:"
-                    kubectl get ingress -n ${K8S_NAMESPACE}
                 """
             }
         }
     }
 
     post {
-
         success {
-            echo 'Application deployed successfully to EKS!'
+            echo "Successfully deployed version ${IMAGE_TAG} to EKS!"
         }
-
         failure {
-            echo 'Pipeline failed!'
+            echo "Pipeline failed! Rolling back to previous Helm release..."
+            sh """
+                helm rollback ${HELM_RELEASE} 0 -n ${K8S_NAMESPACE}
+            """
         }
-
         always {
             sh """
-                docker rmi ${ECR_REGISTRY}/${ECR_REPO}:${BUILD_NUMBER} || true
-
-                docker rmi ${ECR_REGISTRY}/${ECR_REPO}:latest || true
+                docker rmi ${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG} || true
+                docker rmi ${ECR_REPO}:${IMAGE_TAG} || true
             """
         }
     }
