@@ -8,13 +8,26 @@ pipeline {
         EKS_CLUSTER     = 'sample-eks'
         K8S_NAMESPACE   = 'default'
         HELM_RELEASE    = 'sample-app'
-        HELM_CHART_PATH = './helm/sample-app'        // path to your helm chart
-        IMAGE_TAG       = "${BUILD_NUMBER}"
+        HELM_CHART_PATH = './helm/sample-app'
     }
     stages {
         stage('Checkout Code') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Set Version') {
+            steps {
+                script {
+                    // picks git tag like v1.0.0, fallback to v0.0.0-<BUILD_NUMBER>
+                    def gitTag = sh(
+                        script: "git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0'",
+                        returnStdout: true
+                    ).trim()
+                    env.IMAGE_TAG = "${gitTag}-${BUILD_NUMBER}"
+                    echo "Deploying version: ${env.IMAGE_TAG}"
+                }
             }
         }
 
@@ -59,6 +72,7 @@ pipeline {
                         --set image.repository=${ECR_REGISTRY}/${ECR_REPO} \
                         --set image.tag=${IMAGE_TAG} \
                         --set image.pullPolicy=IfNotPresent \
+                        --set appVersion=${IMAGE_TAG} \
                         --wait \
                         --timeout 2m \
                         --atomic
@@ -69,20 +83,16 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 sh """
+                    echo "==> Deployed Version: ${IMAGE_TAG}"
+
                     echo "==> Helm Release Status:"
                     helm status ${HELM_RELEASE} -n ${K8S_NAMESPACE}
 
-                    echo "==> Helm History (versions):"
+                    echo "==> Helm History:"
                     helm history ${HELM_RELEASE} -n ${K8S_NAMESPACE}
-
-                    echo "==> Deployments:"
-                    kubectl get deployments -n ${K8S_NAMESPACE}
 
                     echo "==> Pods:"
                     kubectl get pods -n ${K8S_NAMESPACE}
-
-                    echo "==> Services:"
-                    kubectl get svc -n ${K8S_NAMESPACE}
                 """
             }
         }
@@ -90,13 +100,11 @@ pipeline {
 
     post {
         success {
-            echo "Successfully deployed version ${IMAGE_TAG} to EKS!"
+            echo "Successfully deployed version: ${IMAGE_TAG}"
         }
         failure {
-            echo "Pipeline failed! Rolling back to previous Helm release..."
-            sh """
-                helm rollback ${HELM_RELEASE} 0 -n ${K8S_NAMESPACE}
-            """
+            echo "Deployment failed! Rolling back..."
+            sh "helm rollback ${HELM_RELEASE} 0 -n ${K8S_NAMESPACE}"
         }
         always {
             sh """
