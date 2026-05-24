@@ -1,0 +1,18 @@
+replicaCount: 1
+
+image:
+  repository: 624858524005.dkr.ecr.ap-south-1.amazonaws.com/sample-app
+  tag: "v1.0.0-1"
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer       # AWS will create ELB automatically
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: false
+
+resources: {}
+
+namespace: default
