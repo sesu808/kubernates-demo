@@ -16,11 +16,9 @@ pipeline {
                 checkout scm
             }
         }
-
         stage('Set Version') {
             steps {
                 script {
-                    // picks git tag like v1.0.0, fallback to v0.0.0-<BUILD_NUMBER>
                     def gitTag = sh(
                         script: "git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0'",
                         returnStdout: true
@@ -30,7 +28,6 @@ pipeline {
                 }
             }
         }
-
         stage('Build Docker Image') {
             steps {
                 dir('app') {
@@ -41,7 +38,6 @@ pipeline {
                 }
             }
         }
-
         stage('Login to Amazon ECR') {
             steps {
                 sh """
@@ -50,7 +46,6 @@ pipeline {
                 """
             }
         }
-
         stage('Push Docker Image to ECR') {
             steps {
                 sh """
@@ -58,7 +53,6 @@ pipeline {
                 """
             }
         }
-
         stage('Deploy to EKS via Helm') {
             steps {
                 sh """
@@ -72,39 +66,31 @@ pipeline {
                         --set image.repository=${ECR_REGISTRY}/${ECR_REPO} \
                         --set image.tag=${IMAGE_TAG} \
                         --set image.pullPolicy=IfNotPresent \
-                        --set appVersion=${IMAGE_TAG} \
                         --wait \
                         --timeout 2m \
                         --atomic
                 """
             }
         }
-
         stage('Verify Deployment') {
             steps {
                 sh """
                     echo "==> Deployed Version: ${IMAGE_TAG}"
-
-                    echo "==> Helm Release Status:"
                     helm status ${HELM_RELEASE} -n ${K8S_NAMESPACE}
-
-                    echo "==> Helm History:"
                     helm history ${HELM_RELEASE} -n ${K8S_NAMESPACE}
-
-                    echo "==> Pods:"
                     kubectl get pods -n ${K8S_NAMESPACE}
+                    kubectl get svc -n ${K8S_NAMESPACE}
                 """
             }
         }
     }
-
     post {
         success {
             echo "Successfully deployed version: ${IMAGE_TAG}"
         }
         failure {
             echo "Deployment failed! Rolling back..."
-            sh "helm rollback ${HELM_RELEASE} 0 -n ${K8S_NAMESPACE}"
+            sh "helm rollback ${HELM_RELEASE} 0 -n ${K8S_NAMESPACE} || true"
         }
         always {
             sh """
