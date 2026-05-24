@@ -26,7 +26,7 @@ def hello():
                      alt="heart icon"
                 />
                 <h1 style="color: #e91e63; font-size: 48px;">
-                    Harshi! ⚠️, Any one save me from her?
+                    Harshi! 🌸, thank you for teaching!🩷
                 </h1>
                 <p style="color: #666; font-size: 20px;">
                     Deployed with Kubernetes & Helm
