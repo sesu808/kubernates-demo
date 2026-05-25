@@ -1,102 +1,129 @@
 pipeline {
     agent any
+
     environment {
-        AWS_REGION      = 'ap-south-1'
-        AWS_ACCOUNT_ID  = '624858524005'
-        ECR_REGISTRY    = '624858524005.dkr.ecr.ap-south-1.amazonaws.com'
-        ECR_REPO        = 'sample-app'
-        EKS_CLUSTER     = 'sample-eks'
-        K8S_NAMESPACE   = 'prabhas'
-        HELM_RELEASE    = 'sample-app'
-        HELM_CHART_PATH = './helm/sample-app'
+        GITHUB_REPO           = 'sesu808/kubernates-demo'
+        GITHUB_REPO_URL       = 'https://github.com/sesu808/kubernates-demo.git'
+        GITHUB_BRANCH         = 'main'
+        GITHUB_CREDENTIALS_ID = 'github-pat'
+
+        AWS_REGION            = 'ap-south-1'
+        AWS_ACCOUNT_ID        = '123456789012'
+        ECR_REPO_NAME         = 'kubernates-demo'
+        ECR_REGISTRY          = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_IMAGE             = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
+
+        HELM_CHART_PATH       = 'helm'
     }
+
     stages {
-        stage('Checkout Code') {
+
+        stage('Checkout') {
             steps {
-                checkout scm
+                checkout([
+                    $class           : 'GitSCM',
+                    branches         : [[name: "*/${GITHUB_BRANCH}"]],
+                    userRemoteConfigs: [[
+                        url          : env.GITHUB_REPO_URL,
+                        credentialsId: env.GITHUB_CREDENTIALS_ID
+                    ]]
+                ])
             }
         }
-        stage('Set Version') {
+
+        stage('Resolve Version Tag') {
             steps {
                 script {
-                    def gitTag = sh(
-                        script: "git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0'",
+                    env.IMAGE_TAG = sh(
+                        script: "git describe --tags --abbrev=0",
                         returnStdout: true
                     ).trim()
-                    env.IMAGE_TAG = "${gitTag}-${BUILD_NUMBER}"
-                    echo "Deploying version: ${env.IMAGE_TAG}"
+                    env.CHART_VERSION = env.IMAGE_TAG.replaceAll(/^v/, '')
+                    echo "Git tag      : ${env.IMAGE_TAG}"
+                    echo "Chart version: ${env.CHART_VERSION}"
                 }
             }
         }
+
         stage('Build Docker Image') {
             steps {
-                dir('app') {
+                sh """
+                    docker build \
+                        --tag ${ECR_IMAGE}:${IMAGE_TAG} \
+                        .
+                """
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                sh """
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                    docker push ${ECR_IMAGE}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Update Helm Chart') {
+            steps {
+                script {
                     sh """
-                        docker build -t ${ECR_REPO}:${IMAGE_TAG} .
-                        docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}
+                        sed -i 's/^version:.*/version: ${CHART_VERSION}/'       ${HELM_CHART_PATH}/Chart.yaml
+                        sed -i 's/^appVersion:.*/appVersion: "${IMAGE_TAG}"/'   ${HELM_CHART_PATH}/Chart.yaml
+                        sed -i 's|repository:.*|repository: ${ECR_IMAGE}|'      ${HELM_CHART_PATH}/values.yaml
+                        sed -i 's|tag:.*|tag: "${IMAGE_TAG}"|'                  ${HELM_CHART_PATH}/values.yaml
                     """
                 }
             }
         }
-        stage('Login to Amazon ECR') {
-            steps {
-                sh """
-                    aws ecr get-login-password --region ${AWS_REGION} | \
-                    docker login --username AWS --password-stdin ${ECR_REGISTRY}
-                """
-            }
-        }
-        stage('Push Docker Image to ECR') {
-            steps {
-                sh """
-                    docker push ${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}
-                """
-            }
-        }
-        stage('Deploy to EKS via Helm') {
-            steps {
-                sh """
-                    aws eks update-kubeconfig \
-                        --region ${AWS_REGION} \
-                        --name ${EKS_CLUSTER}
 
-                    helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
-                        --namespace ${K8S_NAMESPACE} \
-                        --create-namespace \
-                        --set image.repository=${ECR_REGISTRY}/${ECR_REPO} \
-                        --set image.tag=${IMAGE_TAG} \
-                        --set image.pullPolicy=IfNotPresent \
-                        --wait \
-                        --timeout 2m \
-                        --atomic
-                """
+        stage('Commit & Push Helm Changes') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: env.GITHUB_CREDENTIALS_ID,
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )]) {
+                    sh """
+                        git config user.email "jenkins@sesu808.ci"
+                        git config user.name  "Jenkins CI"
+                        git add ${HELM_CHART_PATH}/Chart.yaml ${HELM_CHART_PATH}/values.yaml
+                        git diff --cached --quiet || \
+                            git commit -m "chore: bump helm chart to ${IMAGE_TAG} [ci skip]"
+                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/${GITHUB_REPO}.git HEAD:${GITHUB_BRANCH}
+                    """
+                }
             }
         }
-        stage('Verify Deployment') {
+
+        stage('Helm Deploy') {
+            when {
+                expression { env.IMAGE_TAG ==~ /^v\d+\.\d+\.\d+$/ }
+            }
             steps {
                 sh """
-                    echo "==> Deployed Version: ${IMAGE_TAG}"
-                    helm status ${HELM_RELEASE} -n ${K8S_NAMESPACE}
-                    helm history ${HELM_RELEASE} -n ${K8S_NAMESPACE}
-                    kubectl get pods -n ${K8S_NAMESPACE}
-                    kubectl get svc -n ${K8S_NAMESPACE}
+                    helm upgrade --install kubernates-demo ${HELM_CHART_PATH} \
+                        --namespace production \
+                        --create-namespace \
+                        --set image.repository=${ECR_IMAGE} \
+                        --set image.tag=${IMAGE_TAG} \
+                        --wait --timeout 5m
                 """
             }
         }
     }
+
     post {
         success {
-            echo "Successfully deployed version: ${IMAGE_TAG}"
+            echo "✅ Successfully built, pushed to ECR, and updated Helm chart to ${env.IMAGE_TAG}"
         }
         failure {
-            echo "Deployment failed! Rolling back..."
-            sh "helm rollback ${HELM_RELEASE} 0 -n ${K8S_NAMESPACE} || true"
+            echo "❌ Pipeline failed. Check console output above."
         }
         always {
-            sh """
-                docker rmi ${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG} || true
-                docker rmi ${ECR_REPO}:${IMAGE_TAG} || true
-            """
+            sh "docker rmi ${ECR_IMAGE}:${IMAGE_TAG} || true"
+            cleanWs()
         }
     }
 }
