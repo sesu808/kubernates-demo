@@ -8,7 +8,7 @@ pipeline {
         GITHUB_CREDENTIALS_ID = 'github-pat'
 
         AWS_REGION            = 'ap-south-1'
-        AWS_ACCOUNT_ID        = '123456789012'
+        AWS_ACCOUNT_ID        = '624858524005'
         ECR_REPO_NAME         = 'kubernates-demo'
         ECR_REGISTRY          = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         ECR_IMAGE             = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
