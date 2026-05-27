@@ -38,7 +38,10 @@ pipeline {
                         script: "git rev-parse --short HEAD",
                         returnStdout: true
                     ).trim()
-                    env.CHART_VERSION = env.IMAGE_TAG.replaceAll(/^v/, '')
+                    env.CHART_VERSION = "1.0." + sh(
+                        script: "git rev-list --count HEAD",
+                        returnStdout: true
+                    ).trim()
                     echo "Git commit   : ${env.IMAGE_TAG}"
                     echo "Chart version: ${env.CHART_VERSION}"
                 }
