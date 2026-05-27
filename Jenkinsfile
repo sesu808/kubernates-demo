@@ -34,12 +34,12 @@ pipeline {
         stage('Resolve Version Tag') {
             steps {
                 script {
-                    env.IMAGE_TAG = sh(
-                        script: "git describe --tags --abbrev=0",
+                    env.IMAGE_TAG = "v" + sh(
+                        script: "git rev-parse --short HEAD",
                         returnStdout: true
                     ).trim()
                     env.CHART_VERSION = env.IMAGE_TAG.replaceAll(/^v/, '')
-                    echo "Git tag      : ${env.IMAGE_TAG}"
+                    echo "Git commit   : ${env.IMAGE_TAG}"
                     echo "Chart version: ${env.CHART_VERSION}"
                 }
             }
@@ -99,7 +99,7 @@ pipeline {
 
         stage('Helm Deploy') {
             when {
-                expression { env.IMAGE_TAG ==~ /^v\d+\.\d+\.\d+$/ }
+                expression { env.IMAGE_TAG != null }
             }
             steps {
                 sh """
