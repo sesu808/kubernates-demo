@@ -108,27 +108,29 @@ pipeline {
             }
         }
 
-stage('Helm Deploy') {
-    when {
-        expression { env.IMAGE_TAG != null }
+        stage('Helm Deploy') {
+            when {
+                expression { env.IMAGE_TAG != null }
+            }
+            steps {
+                sh """
+                    helm upgrade --install kubernates-demo ${HELM_CHART_PATH} \
+                        --namespace production \
+                        --create-namespace \
+                        --set image.repository=${ECR_IMAGE} \
+                        --set image.tag=${IMAGE_TAG} \
+                        --set ingress.enabled=true \
+                        --set ingress.className=alb \
+                        --set "ingress.annotations.kubernetes\\.io/ingress\\.class=alb" \
+                        --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/scheme=internet-facing" \
+                        --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/target-type=ip" \
+                        --set httpRoute.enabled=false \
+                        --wait --timeout 5m
+                """
+            }
+        }
+
     }
-    steps {
-        sh """
-            helm upgrade --install kubernates-demo ${HELM_CHART_PATH} \
-                --namespace production \
-                --create-namespace \
-                --set image.repository=${ECR_IMAGE} \
-                --set image.tag=${IMAGE_TAG} \
-                --set ingress.enabled=true \
-                --set ingress.className=alb \
-                --set "ingress.annotations.kubernetes\\.io/ingress\\.class=alb" \
-                --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/scheme=internet-facing" \
-                --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/target-type=ip" \
-                --set httpRoute.enabled=false \
-                --wait --timeout 5m
-        """
-    }
-}
 
     post {
         success {
