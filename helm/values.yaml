@@ -52,11 +52,17 @@ securityContext: {}
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
   # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
-  type: LoadBalancer
+  type: CLusterIP
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 3000
+  targetPort: 3000
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+service:
+  type: ClusterIP        # changed from LoadBalancer
+  port: 3000
+  targetPort: 3000       # added — must match app port
+
 ingress:
   enabled: true
   className: "alb"
@@ -64,7 +70,10 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    # kubernetes.io/tls-acme: "true"
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/healthcheck-port: "3000"          # added
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'    # added
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=10
   hosts:
     - host: ""
       paths:
