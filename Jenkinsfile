@@ -15,7 +15,6 @@ pipeline {
 
         HELM_CHART_PATH       = 'helm'
 
-        // ← NEW
         INGRESS_ENABLED       = 'true'
         INGRESS_CLASS         = 'alb'
     }
@@ -76,13 +75,10 @@ pipeline {
             steps {
                 script {
                     sh """
-                        # existing
                         sed -i 's/^version:.*/version: ${CHART_VERSION}/'       ${HELM_CHART_PATH}/Chart.yaml
                         sed -i 's/^appVersion:.*/appVersion: "${IMAGE_TAG}"/'   ${HELM_CHART_PATH}/Chart.yaml
                         sed -i 's|repository:.*|repository: ${ECR_IMAGE}|'      ${HELM_CHART_PATH}/values.yaml
                         sed -i 's|tag:.*|tag: "${IMAGE_TAG}"|'                  ${HELM_CHART_PATH}/values.yaml
-
-                        # ← NEW: enable ingress
                         sed -i 's|^  enabled:.*|  enabled: ${INGRESS_ENABLED}|' ${HELM_CHART_PATH}/values.yaml
                     """
                 }
@@ -108,26 +104,28 @@ pipeline {
             }
         }
 
-stage('Helm Deploy') {
-    when {
-        expression { env.IMAGE_TAG != null }
-    }
-    steps {
-        sh """
-            helm upgrade --install kubernates-demo ${HELM_CHART_PATH} \
-                --namespace production \
-                --create-namespace \
-                --set image.repository=${ECR_IMAGE} \
-                --set image.tag=${IMAGE_TAG} \
-                --set ingress.enabled=true \
-                --set ingress.className=alb \
-                --set "ingress.annotations.kubernetes\\.io/ingress\\.class=alb" \
-                --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/scheme=internet-facing" \
-                --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/target-type=ip" \
-                --set httpRoute.enabled=false
-        """
-    }
-}
+        stage('Helm Deploy') {
+            when {
+                expression { env.IMAGE_TAG != null }
+            }
+            steps {
+                sh """
+                    helm upgrade --install kubernates-demo ${HELM_CHART_PATH} \
+                        --namespace production \
+                        --create-namespace \
+                        --set image.repository=${ECR_IMAGE} \
+                        --set image.tag=${IMAGE_TAG} \
+                        --set ingress.enabled=true \
+                        --set ingress.className=alb \
+                        --set "ingress.annotations.kubernetes\\.io/ingress\\.class=alb" \
+                        --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/scheme=internet-facing" \
+                        --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/target-type=ip" \
+                        --set httpRoute.enabled=false
+                """
+            }
+        }
+
+    }   // end stages
 
     post {
         success {
@@ -141,4 +139,5 @@ stage('Helm Deploy') {
             cleanWs()
         }
     }
-}
+
+}   // end pipeline
