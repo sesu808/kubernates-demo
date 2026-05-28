@@ -56,7 +56,7 @@ service:
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 80
   targetPort: 8080
-  containerPort: 8080   # whatever the key is in your values.yaml
+  #containerPort: 8080   # whatever the key is in your values.yaml
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
      # added — must match app port
