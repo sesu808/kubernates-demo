@@ -18,7 +18,7 @@ pipeline {
         ECR_IMAGE             = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
 
         HELM_CHART_PATH       = 'helm'
-        SLACK_CHANNEL         = '#deployments'
+        SLACK_CHANNEL         = 'C0B6VQ7Q9NH'
         SLACK_CREDENTIALS_ID  = 'slack-token'
     }
 
