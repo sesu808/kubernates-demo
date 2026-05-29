@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    options {
+        disableConcurrentBuilds()    // ← prevents multiple runs at same time
+    }
+
     environment {
         GITHUB_REPO           = 'sesu808/kubernates-demo'
         GITHUB_REPO_URL       = 'https://github.com/sesu808/kubernates-demo.git'
@@ -26,6 +30,10 @@ pipeline {
                     userRemoteConfigs: [[
                         url          : env.GITHUB_REPO_URL,
                         credentialsId: env.GITHUB_CREDENTIALS_ID
+                    ]],
+                    extensions: [[
+                        $class          : 'MessageExclusion',
+                        excludedMessage : '.*\\[ci skip\\].*'   // ← skip Jenkins own commits
                     ]]
                 ])
             }
@@ -72,11 +80,8 @@ pipeline {
             steps {
                 script {
                     sh """
-                        # Chart metadata
                         sed -i 's/^version:.*/version: ${CHART_VERSION}/'       ${HELM_CHART_PATH}/Chart.yaml
                         sed -i 's/^appVersion:.*/appVersion: "${IMAGE_TAG}"/'   ${HELM_CHART_PATH}/Chart.yaml
-
-                        # Image
                         sed -i 's|repository:.*|repository: ${ECR_IMAGE}|'      ${HELM_CHART_PATH}/values.yaml
                         sed -i 's|tag:.*|tag: "${IMAGE_TAG}"|'                  ${HELM_CHART_PATH}/values.yaml
                     """
@@ -121,7 +126,7 @@ pipeline {
             }
         }
 
-    }   // end stages
+    }
 
     post {
         success {
@@ -136,4 +141,4 @@ pipeline {
         }
     }
 
-}   // end pipeline
+}
