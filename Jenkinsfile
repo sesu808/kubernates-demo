@@ -14,16 +14,6 @@ pipeline {
         ECR_IMAGE             = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
 
         HELM_CHART_PATH       = 'helm'
-
-        INGRESS_ENABLED       = 'true'
-        INGRESS_CLASS         = 'alb'
-
-        // Autoscaling
-        HPA_ENABLED           = 'true'
-        HPA_MIN_REPLICAS      = '2'
-        HPA_MAX_REPLICAS      = '5'
-        HPA_CPU_TARGET        = '70'
-        HPA_MEMORY_TARGET     = '80'
     }
 
     stages {
@@ -89,15 +79,6 @@ pipeline {
                         # Image
                         sed -i 's|repository:.*|repository: ${ECR_IMAGE}|'      ${HELM_CHART_PATH}/values.yaml
                         sed -i 's|tag:.*|tag: "${IMAGE_TAG}"|'                  ${HELM_CHART_PATH}/values.yaml
-
-                        # Ingress
-                        sed -i 's|^  enabled:.*|  enabled: ${INGRESS_ENABLED}|' ${HELM_CHART_PATH}/values.yaml
-
-                        # Autoscaling
-                        sed -i 's|^  minReplicas:.*|  minReplicas: ${HPA_MIN_REPLICAS}|'                               ${HELM_CHART_PATH}/values.yaml
-                        sed -i 's|^  maxReplicas:.*|  maxReplicas: ${HPA_MAX_REPLICAS}|'                               ${HELM_CHART_PATH}/values.yaml
-                        sed -i 's|^  targetCPUUtilizationPercentage:.*|  targetCPUUtilizationPercentage: ${HPA_CPU_TARGET}|'       ${HELM_CHART_PATH}/values.yaml
-                        sed -i 's|^  targetMemoryUtilizationPercentage:.*|  targetMemoryUtilizationPercentage: ${HPA_MEMORY_TARGET}|' ${HELM_CHART_PATH}/values.yaml
                     """
                 }
             }
@@ -133,17 +114,9 @@ pipeline {
                         --create-namespace \
                         --set image.repository=${ECR_IMAGE} \
                         --set image.tag=${IMAGE_TAG} \
-                        --set ingress.enabled=true \
-                        --set ingress.className=alb \
-                        --set "ingress.annotations.kubernetes\\.io/ingress\\.class=alb" \
-                        --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/scheme=internet-facing" \
-                        --set "ingress.annotations.alb\\.ingress\\.kubernetes\\.io/target-type=ip" \
+                        --set ingress.enabled=false \
                         --set httpRoute.enabled=false \
-                        --set autoscaling.enabled=${HPA_ENABLED} \
-                        --set autoscaling.minReplicas=${HPA_MIN_REPLICAS} \
-                        --set autoscaling.maxReplicas=${HPA_MAX_REPLICAS} \
-                        --set autoscaling.targetCPUUtilizationPercentage=${HPA_CPU_TARGET} \
-                        --set autoscaling.targetMemoryUtilizationPercentage=${HPA_MEMORY_TARGET}
+                        --set autoscaling.enabled=false
                 """
             }
         }
@@ -152,7 +125,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Successfully built, pushed to ECR, and deployed Helm chart ${env.IMAGE_TAG} with autoscaling (${HPA_MIN_REPLICAS}-${HPA_MAX_REPLICAS} replicas)"
+            echo "✅ Successfully built, pushed to ECR, and deployed Helm chart ${env.IMAGE_TAG}"
         }
         failure {
             echo "❌ Pipeline failed. Check console output above."
