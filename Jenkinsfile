@@ -67,6 +67,15 @@ pipeline {
             }
         }
 
+        stage('Approval') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    input message: "Deploy ${env.IMAGE_TAG} to production?",
+                          ok: 'Deploy Now'
+                }
+            }
+        }
+
         stage('Helm Deploy') {
             steps {
                 sh """
@@ -91,10 +100,32 @@ pipeline {
         failure {
             echo "❌ Pipeline failed. Check console output above."
         }
+        aborted {
+            echo "⚠️ Deployment was rejected at approval stage."
+        }
         always {
             script {
                 if (env.IMAGE_TAG) {
+                    // Remove local docker image
                     sh "docker rmi ${ECR_IMAGE}:${IMAGE_TAG} || true"
+
+                    // Remove dangling/unused docker images
+                    sh "docker image prune -f || true"
+
+                    // Keep only last 5 images in ECR, delete older ones
+                    sh """
+                        aws ecr describe-images \
+                            --repository-name ${ECR_REPO_NAME} \
+                            --region ${AWS_REGION} \
+                            --query 'sort_by(imageDetails, &imagePushedAt)[*].imageDigest' \
+                            --output text | tr '\\t' '\\n' | head -n -5 | \
+                        while read digest; do
+                            aws ecr batch-delete-image \
+                                --repository-name ${ECR_REPO_NAME} \
+                                --region ${AWS_REGION} \
+                                --image-ids imageDigest=\$digest || true
+                        done
+                    """
                 }
             }
             cleanWs()
