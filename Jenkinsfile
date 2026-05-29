@@ -18,6 +18,8 @@ pipeline {
         ECR_IMAGE             = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
 
         HELM_CHART_PATH       = 'helm'
+        SLACK_CHANNEL         = '#deployments'
+        SLACK_CREDENTIALS_ID  = 'slack-token'
     }
 
     stages {
@@ -43,6 +45,22 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     echo "Git commit: ${env.IMAGE_TAG}"
+
+                    // Save current revision before deploying for rollback
+                    env.HELM_REVISION = sh(
+                        script: """
+                            helm history kubernates-demo -n production \
+                                --output json 2>/dev/null | \
+                            python3 -c \"
+import sys, json
+history = json.load(sys.stdin)
+successful = [h for h in history if h['status'] in ['deployed', 'superseded']]
+print(successful[-1]['revision'] if successful else '0')
+\" 2>/dev/null || echo '0'
+                        """,
+                        returnStdout: true
+                    ).trim()
+                    echo "Current stable revision: ${env.HELM_REVISION}"
                 }
             }
         }
@@ -78,16 +96,49 @@ pipeline {
 
         stage('Helm Deploy') {
             steps {
-                sh """
-                    helm upgrade --install kubernates-demo ${HELM_CHART_PATH} \
-                        --namespace production \
-                        --create-namespace \
-                        --set image.repository=${ECR_IMAGE} \
-                        --set image.tag=${IMAGE_TAG} \
-                        --set ingress.enabled=false \
-                        --set httpRoute.enabled=false \
-                        --set autoscaling.enabled=false
-                """
+                script {
+                    try {
+                        sh """
+                            helm upgrade --install kubernates-demo ${HELM_CHART_PATH} \
+                                --namespace production \
+                                --create-namespace \
+                                --set image.repository=${ECR_IMAGE} \
+                                --set image.tag=${IMAGE_TAG} \
+                                --set ingress.enabled=false \
+                                --set httpRoute.enabled=false \
+                                --set autoscaling.enabled=false \
+                                --wait \
+                                --timeout 3m
+                        """
+                        echo "✅ Deployment successful"
+
+                    } catch (err) {
+                        echo "❌ Deployment failed — starting rollback..."
+
+                        if (env.HELM_REVISION != '0') {
+                            sh """
+                                helm rollback kubernates-demo ${HELM_REVISION} \
+                                    --namespace production \
+                                    --wait
+                            """
+                            echo "✅ Rolled back to revision ${env.HELM_REVISION}"
+
+                            slackSend(
+                                channel: env.SLACK_CHANNEL,
+                                color: 'warning',
+                                message: """⚠️ *Rollback Triggered*
+Job: ${env.JOB_NAME}
+Build: #${env.BUILD_NUMBER}
+Failed Version: ${env.IMAGE_TAG}
+Rolled back to revision: ${env.HELM_REVISION}"""
+                            )
+                        } else {
+                            echo "⚠️ No previous revision found — skipping rollback"
+                        }
+
+                        error("Deployment failed — rolled back to revision ${env.HELM_REVISION}")
+                    }
+                }
             }
         }
 
@@ -95,24 +146,47 @@ pipeline {
 
     post {
         success {
-            echo "✅ Successfully built, pushed to ECR, and deployed Helm chart ${env.IMAGE_TAG}"
+            echo "✅ Successfully deployed ${env.IMAGE_TAG}"
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: """✅ *Deployment Successful*
+Job: ${env.JOB_NAME}
+Build: #${env.BUILD_NUMBER}
+Version: ${env.IMAGE_TAG}
+Duration: ${currentBuild.durationString}"""
+            )
         }
         failure {
-            echo "❌ Pipeline failed. Check console output above."
+            echo "❌ Pipeline failed."
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: """❌ *Pipeline Failed*
+Job: ${env.JOB_NAME}
+Build: #${env.BUILD_NUMBER}
+Version: ${env.IMAGE_TAG ?: 'N/A'}
+Duration: ${currentBuild.durationString}
+URL: ${env.BUILD_URL}"""
+            )
         }
         aborted {
-            echo "⚠️ Deployment was rejected at approval stage."
+            echo "⚠️ Deployment rejected at approval."
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'warning',
+                message: """⚠️ *Deployment Aborted*
+Job: ${env.JOB_NAME}
+Build: #${env.BUILD_NUMBER}
+Version: ${env.IMAGE_TAG ?: 'N/A'}
+Reason: Rejected at approval stage"""
+            )
         }
         always {
             script {
                 if (env.IMAGE_TAG) {
-                    // Remove local docker image
                     sh "docker rmi ${ECR_IMAGE}:${IMAGE_TAG} || true"
-
-                    // Remove dangling/unused docker images
                     sh "docker image prune -f || true"
-
-                    // Keep only last 5 images in ECR, delete older ones
                     sh """
                         aws ecr describe-images \
                             --repository-name ${ECR_REPO_NAME} \
