@@ -142,16 +142,18 @@ pipeline {
     }
 
     post {
-        success {
-            echo "✅ Successfully built, pushed to ECR, and deployed Helm chart ${env.IMAGE_TAG}"
-        }
-        failure {
-            echo "❌ Pipeline failed. Check console output above."
-        }
-        always {
-            sh "docker rmi ${ECR_IMAGE}:${IMAGE_TAG} || true"
-            cleanWs()
-        }
+    success {
+        echo "✅ Successfully built, pushed to ECR, and deployed Helm chart ${env.IMAGE_TAG}"
     }
-
+    failure {
+        echo "❌ Pipeline failed. Check console output above."
+    }
+    always {
+        script {
+            if (env.IMAGE_TAG) {
+                sh "docker rmi ${ECR_IMAGE}:${IMAGE_TAG} || true"
+            }
+        }
+        cleanWs()
+    }
 }
