@@ -120,16 +120,14 @@ print(successful[-1]['revision'] if successful else '0')
                             """
                             echo "✅ Rolled back to revision ${env.HELM_REVISION}"
 
-                            slackSend(
-                                channel: 'C0B6VQ7Q9NH',
-                                color: 'warning',
-                                message: """⚠️ *Rollback Triggered*
-*Job:* ${env.JOB_NAME}
-*Build:* #${env.BUILD_NUMBER}
-*Failed Version:* ${env.IMAGE_TAG}
-*Rolled Back To Revision:* ${env.HELM_REVISION}
-*URL:* ${env.BUILD_URL}"""
-                            )
+                            sh """
+                                WEBHOOK=\$(cat /var/lib/jenkins/slack_webhook.txt)
+                                curl -X POST \$WEBHOOK \
+                                    -H 'Content-Type: application/json' \
+                                    -d '{
+                                        "text": "⚠️ *Rollback Triggered*\\n*Job:* ${env.JOB_NAME}\\n*Build:* #${env.BUILD_NUMBER}\\n*Failed Version:* ${env.IMAGE_TAG}\\n*Rolled Back To Revision:* ${env.HELM_REVISION}\\n*URL:* ${env.BUILD_URL}"
+                                    }'
+                            """
                         } else {
                             echo "⚠️ No previous revision found — skipping rollback"
                         }
@@ -145,41 +143,36 @@ print(successful[-1]['revision'] if successful else '0')
     post {
         success {
             echo "✅ Successfully deployed ${env.IMAGE_TAG}"
-            slackSend(
-                channel: 'C0B6VQ7Q9NH',
-                color: 'good',
-                message: """✅ *Deployment Successful*
-*Job:* ${env.JOB_NAME}
-*Build:* #${env.BUILD_NUMBER}
-*Version:* ${env.IMAGE_TAG}
-*Duration:* ${currentBuild.durationString}
-*URL:* ${env.BUILD_URL}"""
-            )
+            sh """
+                WEBHOOK=\$(cat /var/lib/jenkins/slack_webhook.txt)
+                curl -X POST \$WEBHOOK \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "text": "✅ *Deployment Successful*\\n*Job:* ${env.JOB_NAME}\\n*Build:* #${env.BUILD_NUMBER}\\n*Version:* ${env.IMAGE_TAG}\\n*Duration:* ${currentBuild.durationString}\\n*URL:* ${env.BUILD_URL}"
+                    }'
+            """
         }
         failure {
             echo "❌ Pipeline failed."
-            slackSend(
-                channel: 'C0B6VQ7Q9NH',
-                color: 'danger',
-                message: """❌ *Pipeline Failed*
-*Job:* ${env.JOB_NAME}
-*Build:* #${env.BUILD_NUMBER}
-*Version:* ${env.IMAGE_TAG ?: 'N/A'}
-*Duration:* ${currentBuild.durationString}
-*URL:* ${env.BUILD_URL}"""
-            )
+            sh """
+                WEBHOOK=\$(cat /var/lib/jenkins/slack_webhook.txt)
+                curl -X POST \$WEBHOOK \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "text": "❌ *Pipeline Failed*\\n*Job:* ${env.JOB_NAME}\\n*Build:* #${env.BUILD_NUMBER}\\n*Version:* ${env.IMAGE_TAG ?: 'N/A'}\\n*Duration:* ${currentBuild.durationString}\\n*URL:* ${env.BUILD_URL}"
+                    }'
+            """
         }
         aborted {
             echo "⚠️ Deployment rejected at approval."
-            slackSend(
-                channel: 'C0B6VQ7Q9NH',
-                color: 'warning',
-                message: """⚠️ *Deployment Aborted*
-*Job:* ${env.JOB_NAME}
-*Build:* #${env.BUILD_NUMBER}
-*Version:* ${env.IMAGE_TAG ?: 'N/A'}
-*Reason:* Rejected at approval stage"""
-            )
+            sh """
+                WEBHOOK=\$(cat /var/lib/jenkins/slack_webhook.txt)
+                curl -X POST \$WEBHOOK \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "text": "⚠️ *Deployment Aborted*\\n*Job:* ${env.JOB_NAME}\\n*Build:* #${env.BUILD_NUMBER}\\n*Version:* ${env.IMAGE_TAG ?: 'N/A'}\\n*Reason:* Rejected at approval stage"
+                    }'
+            """
         }
         always {
             script {
