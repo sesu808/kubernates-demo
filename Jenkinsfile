@@ -46,14 +46,8 @@ pipeline {
 
                     env.HELM_REVISION = sh(
                         script: """
-                            helm history kubernates-demo -n production \
-                                --output json 2>/dev/null | \
-                            python3 -c \"
-import sys, json
-history = json.load(sys.stdin)
-successful = [h for h in history if h['status'] in ['deployed', 'superseded']]
-print(successful[-1]['revision'] if successful else '0')
-\" 2>/dev/null || echo '0'
+                            helm history kubernates-demo -n production --max 1 2>/dev/null | \
+                            awk 'NR>1 {print \$1}' | tail -1 || echo '0'
                         """,
                         returnStdout: true
                     ).trim()
@@ -101,9 +95,6 @@ print(successful[-1]['revision'] if successful else '0')
                                 --create-namespace \
                                 --set image.repository=${ECR_IMAGE} \
                                 --set image.tag=${IMAGE_TAG} \
-                                --set ingress.enabled=false \
-                                --set httpRoute.enabled=false \
-                                --set autoscaling.enabled=false \
                                 --wait \
                                 --timeout 3m
                         """
