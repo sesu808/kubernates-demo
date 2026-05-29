@@ -30,16 +30,12 @@ pipeline {
                     userRemoteConfigs: [[
                         url          : env.GITHUB_REPO_URL,
                         credentialsId: env.GITHUB_CREDENTIALS_ID
-                    ]],
-                    extensions: [[
-                        $class          : 'MessageExclusion',
-                        excludedMessage : '.*\\[ci skip\\].*'
                     ]]
                 ])
             }
         }
 
-        stage('Check CI Skip') {       // ← NEW: abort if Jenkins own commit
+        stage('Check CI Skip') {
             steps {
                 script {
                     def msg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
@@ -142,18 +138,20 @@ pipeline {
     }
 
     post {
-    success {
-        echo "✅ Successfully built, pushed to ECR, and deployed Helm chart ${env.IMAGE_TAG}"
-    }
-    failure {
-        echo "❌ Pipeline failed. Check console output above."
-    }
-    always {
-        script {
-            if (env.IMAGE_TAG) {
-                sh "docker rmi ${ECR_IMAGE}:${IMAGE_TAG} || true"
-            }
+        success {
+            echo "✅ Successfully built, pushed to ECR, and deployed Helm chart ${env.IMAGE_TAG}"
         }
-        cleanWs()
+        failure {
+            echo "❌ Pipeline failed. Check console output above."
+        }
+        always {
+            script {
+                if (env.IMAGE_TAG) {
+                    sh "docker rmi ${ECR_IMAGE}:${IMAGE_TAG} || true"
+                }
+            }
+            cleanWs()
+        }
     }
+
 }
