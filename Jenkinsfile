@@ -35,18 +35,6 @@ pipeline {
             }
         }
 
-        stage('Check CI Skip') {
-            steps {
-                script {
-                    def msg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
-                    if (msg.contains('[ci skip]')) {
-                        currentBuild.result = 'NOT_BUILT'
-                        error("Skipping build: [ci skip] commit detected")
-                    }
-                }
-            }
-        }
-
         stage('Resolve Version Tag') {
             steps {
                 script {
@@ -54,12 +42,7 @@ pipeline {
                         script: "git rev-parse --short HEAD",
                         returnStdout: true
                     ).trim()
-                    env.CHART_VERSION = "1.0." + sh(
-                        script: "git rev-list --count HEAD",
-                        returnStdout: true
-                    ).trim()
-                    echo "Git commit   : ${env.IMAGE_TAG}"
-                    echo "Chart version: ${env.CHART_VERSION}"
+                    echo "Git commit: ${env.IMAGE_TAG}"
                 }
             }
         }
@@ -84,43 +67,7 @@ pipeline {
             }
         }
 
-        stage('Update Helm Chart') {
-            steps {
-                script {
-                    sh """
-                        sed -i 's/^version:.*/version: ${CHART_VERSION}/'       ${HELM_CHART_PATH}/Chart.yaml
-                        sed -i 's/^appVersion:.*/appVersion: "${IMAGE_TAG}"/'   ${HELM_CHART_PATH}/Chart.yaml
-                        sed -i 's|repository:.*|repository: ${ECR_IMAGE}|'      ${HELM_CHART_PATH}/values.yaml
-                        sed -i 's|tag:.*|tag: "${IMAGE_TAG}"|'                  ${HELM_CHART_PATH}/values.yaml
-                    """
-                }
-            }
-        }
-
-        stage('Commit & Push Helm Changes') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: env.GITHUB_CREDENTIALS_ID,
-                    usernameVariable: 'GIT_USER',
-                    passwordVariable: 'GIT_TOKEN'
-                )]) {
-                    sh """
-                        git config user.email "jenkins@sesu808.ci"
-                        git config user.name  "Jenkins CI"
-                        git add ${HELM_CHART_PATH}/Chart.yaml ${HELM_CHART_PATH}/values.yaml
-                        git diff --cached --quiet || \
-                            git commit -m "chore: bump helm chart to ${IMAGE_TAG} [ci skip]"
-                        git pull --rebase https://${GIT_USER}:${GIT_TOKEN}@github.com/${GITHUB_REPO}.git ${GITHUB_BRANCH}
-                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/${GITHUB_REPO}.git HEAD:${GITHUB_BRANCH}
-                    """
-                }
-            }
-        }
-
         stage('Helm Deploy') {
-            when {
-                expression { env.IMAGE_TAG != null }
-            }
             steps {
                 sh """
                     helm upgrade --install kubernates-demo ${HELM_CHART_PATH} \
