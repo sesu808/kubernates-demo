@@ -18,7 +18,6 @@ pipeline {
         ECR_IMAGE             = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
 
         HELM_CHART_PATH       = 'helm'
-        SLACK_WEBHOOK_URL     = credentials('slack-webhook-url')
     }
 
     stages {
@@ -122,7 +121,7 @@ print(successful[-1]['revision'] if successful else '0')
                             echo "✅ Rolled back to revision ${env.HELM_REVISION}"
 
                             slackSend(
-                                baseUrl: env.SLACK_WEBHOOK_URL,
+                                channel: 'C0B6VQ7Q9NH',
                                 color: 'warning',
                                 message: """⚠️ *Rollback Triggered*
 *Job:* ${env.JOB_NAME}
@@ -147,7 +146,7 @@ print(successful[-1]['revision'] if successful else '0')
         success {
             echo "✅ Successfully deployed ${env.IMAGE_TAG}"
             slackSend(
-                baseUrl: env.SLACK_WEBHOOK_URL,
+                channel: 'C0B6VQ7Q9NH',
                 color: 'good',
                 message: """✅ *Deployment Successful*
 *Job:* ${env.JOB_NAME}
@@ -160,7 +159,7 @@ print(successful[-1]['revision'] if successful else '0')
         failure {
             echo "❌ Pipeline failed."
             slackSend(
-                baseUrl: env.SLACK_WEBHOOK_URL,
+                channel: 'C0B6VQ7Q9NH',
                 color: 'danger',
                 message: """❌ *Pipeline Failed*
 *Job:* ${env.JOB_NAME}
@@ -173,7 +172,7 @@ print(successful[-1]['revision'] if successful else '0')
         aborted {
             echo "⚠️ Deployment rejected at approval."
             slackSend(
-                baseUrl: env.SLACK_WEBHOOK_URL,
+                channel: 'C0B6VQ7Q9NH',
                 color: 'warning',
                 message: """⚠️ *Deployment Aborted*
 *Job:* ${env.JOB_NAME}
