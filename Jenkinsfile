@@ -18,8 +18,6 @@ pipeline {
         ECR_IMAGE             = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
 
         HELM_CHART_PATH       = 'helm'
-        SLACK_CHANNEL         = 'C0B6VQ7Q9NH'
-        SLACK_CREDENTIALS_ID  = 'slack-token'
     }
 
     stages {
@@ -46,7 +44,6 @@ pipeline {
                     ).trim()
                     echo "Git commit: ${env.IMAGE_TAG}"
 
-                    // Save current revision before deploying for rollback
                     env.HELM_REVISION = sh(
                         script: """
                             helm history kubernates-demo -n production \
@@ -124,13 +121,13 @@ print(successful[-1]['revision'] if successful else '0')
                             echo "✅ Rolled back to revision ${env.HELM_REVISION}"
 
                             slackSend(
-                                channel: env.SLACK_CHANNEL,
                                 color: 'warning',
                                 message: """⚠️ *Rollback Triggered*
-Job: ${env.JOB_NAME}
-Build: #${env.BUILD_NUMBER}
-Failed Version: ${env.IMAGE_TAG}
-Rolled back to revision: ${env.HELM_REVISION}"""
+*Job:* ${env.JOB_NAME}
+*Build:* #${env.BUILD_NUMBER}
+*Failed Version:* ${env.IMAGE_TAG}
+*Rolled Back To Revision:* ${env.HELM_REVISION}
+*URL:* ${env.BUILD_URL}"""
                             )
                         } else {
                             echo "⚠️ No previous revision found — skipping rollback"
@@ -148,38 +145,36 @@ Rolled back to revision: ${env.HELM_REVISION}"""
         success {
             echo "✅ Successfully deployed ${env.IMAGE_TAG}"
             slackSend(
-                channel: env.SLACK_CHANNEL,
                 color: 'good',
                 message: """✅ *Deployment Successful*
-Job: ${env.JOB_NAME}
-Build: #${env.BUILD_NUMBER}
-Version: ${env.IMAGE_TAG}
-Duration: ${currentBuild.durationString}"""
+*Job:* ${env.JOB_NAME}
+*Build:* #${env.BUILD_NUMBER}
+*Version:* ${env.IMAGE_TAG}
+*Duration:* ${currentBuild.durationString}
+*URL:* ${env.BUILD_URL}"""
             )
         }
         failure {
             echo "❌ Pipeline failed."
             slackSend(
-                channel: env.SLACK_CHANNEL,
                 color: 'danger',
                 message: """❌ *Pipeline Failed*
-Job: ${env.JOB_NAME}
-Build: #${env.BUILD_NUMBER}
-Version: ${env.IMAGE_TAG ?: 'N/A'}
-Duration: ${currentBuild.durationString}
-URL: ${env.BUILD_URL}"""
+*Job:* ${env.JOB_NAME}
+*Build:* #${env.BUILD_NUMBER}
+*Version:* ${env.IMAGE_TAG ?: 'N/A'}
+*Duration:* ${currentBuild.durationString}
+*URL:* ${env.BUILD_URL}"""
             )
         }
         aborted {
             echo "⚠️ Deployment rejected at approval."
             slackSend(
-                channel: env.SLACK_CHANNEL,
                 color: 'warning',
                 message: """⚠️ *Deployment Aborted*
-Job: ${env.JOB_NAME}
-Build: #${env.BUILD_NUMBER}
-Version: ${env.IMAGE_TAG ?: 'N/A'}
-Reason: Rejected at approval stage"""
+*Job:* ${env.JOB_NAME}
+*Build:* #${env.BUILD_NUMBER}
+*Version:* ${env.IMAGE_TAG ?: 'N/A'}
+*Reason:* Rejected at approval stage"""
             )
         }
         always {
