@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     options {
-        disableConcurrentBuilds()    // ← prevents multiple runs at same time
+        disableConcurrentBuilds()
     }
 
     environment {
@@ -33,9 +33,21 @@ pipeline {
                     ]],
                     extensions: [[
                         $class          : 'MessageExclusion',
-                        excludedMessage : '.*\\[ci skip\\].*'   // ← skip Jenkins own commits
+                        excludedMessage : '.*\\[ci skip\\].*'
                     ]]
                 ])
+            }
+        }
+
+        stage('Check CI Skip') {       // ← NEW: abort if Jenkins own commit
+            steps {
+                script {
+                    def msg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+                    if (msg.contains('[ci skip]')) {
+                        currentBuild.result = 'NOT_BUILT'
+                        error("Skipping build: [ci skip] commit detected")
+                    }
+                }
             }
         }
 
@@ -102,6 +114,7 @@ pipeline {
                         git add ${HELM_CHART_PATH}/Chart.yaml ${HELM_CHART_PATH}/values.yaml
                         git diff --cached --quiet || \
                             git commit -m "chore: bump helm chart to ${IMAGE_TAG} [ci skip]"
+                        git pull --rebase https://${GIT_USER}:${GIT_TOKEN}@github.com/${GITHUB_REPO}.git ${GITHUB_BRANCH}
                         git push https://${GIT_USER}:${GIT_TOKEN}@github.com/${GITHUB_REPO}.git HEAD:${GITHUB_BRANCH}
                     """
                 }
