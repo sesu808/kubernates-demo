@@ -1,4 +1,4 @@
-import sys
+import time
 from flask import Flask
 
 app = Flask(__name__)
@@ -40,6 +40,7 @@ def hello():
 
 @app.route('/health')
 def health():
+    time.sleep(100)  # simulate deadlock — liveness probe will timeout
     return "OK", 200
 
 if __name__ == '__main__':
