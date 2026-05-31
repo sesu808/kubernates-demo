@@ -68,7 +68,7 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/healthcheck-path: /health
     alb.ingress.kubernetes.io/healthcheck-port: "8080"          # added
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'    # added
     alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=10
@@ -135,12 +135,21 @@ resources:
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
-    path: /
+    path: /health    # changed from / to /health — tests real app health endpoint
     port: 8080
+  initialDelaySeconds: 10   # wait 10s before first check (app startup time)
+  periodSeconds: 10         # check every 10s
+  timeoutSeconds: 1         # fail if no response within 1s
+  failureThreshold: 3       # restart pod after 3 consecutive failures
+
 readinessProbe:
   httpGet:
-    path: /
+    path: /health    # changed from / to /health — tests real app health endpoint
     port: 8080
+  initialDelaySeconds: 5    # wait 5s before first check (less than liveness)
+  periodSeconds: 10         # check every 10s
+  timeoutSeconds: 1         # fail if no response within 1s
+  failureThreshold: 3       # remove from service after 3 consecutive failures
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -252,4 +261,3 @@ affinity:
     #         values:
     #         - kubernates-demo-test
     #     topologyKey: kubernetes.io/hostname
-    #trigger pipeline
