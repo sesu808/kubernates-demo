@@ -40,8 +40,7 @@ def hello():
 
 @app.route('/health')
 def health():
-    time.sleep(100)  # simulate deadlock — liveness probe will timeout
-    return "OK", 200
+    return "ERROR", 500   # simulate app not ready
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
