@@ -252,3 +252,4 @@ affinity:
     #         values:
     #         - kubernates-demo-test
     #     topologyKey: kubernetes.io/hostname
+    #trigger pipeline
