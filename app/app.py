@@ -1,8 +1,4 @@
-import sys
-from flask import Flask
-
-sys.exit(1)  # Force crash — remove this to fix
-
+ from flask import Flask
 app = Flask(__name__)
 
 @app.route('/')
