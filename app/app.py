@@ -28,6 +28,7 @@ def hello():
                 <h1 style="color: #e91e63; font-size: 48px;">
                     Lets gear up!!!✊
                 </h1>
+                break the pipeline
                 <p style="color: #666; font-size: 20px;">
                     Deployed with Kubernetes & Helm
                 </p>
