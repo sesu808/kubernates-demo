@@ -75,7 +75,7 @@ ingress:
   hosts:
     - host: ""
       paths:
-        - path: /
+        - path: /wrongpath
           pathType: Prefix
           # pathType: ImplementationSpecific
   tls: []
