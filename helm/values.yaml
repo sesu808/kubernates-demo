@@ -113,7 +113,7 @@ livenessProbe:
   httpGet:
     path: /health    # tests real app health endpoint
     port: 8080
-  initialDelaySeconds: 10   # wait 10s before first check (app startup time)
+  initialDelaySeconds: 120   # wait 10s before first check (app startup time)
   periodSeconds: 10         # check every 10s
   timeoutSeconds: 1         # fail if no response within 1s
   failureThreshold: 3       # restart pod after 3 consecutive failures
