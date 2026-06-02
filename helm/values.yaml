@@ -109,23 +109,27 @@ resources:
     memory: 128Mi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe:
-  httpGet:
-    path: /health    # tests real app health endpoint
-    port: 8080
-  initialDelaySeconds: 120   # wait 10s before first check (app startup time)
-  periodSeconds: 10         # check every 10s
-  timeoutSeconds: 1         # fail if no response within 1s
-  failureThreshold: 3       # restart pod after 3 consecutive failures
+# ← DISABLED for debugging: probes were killing pod before we could investigate the 500 error
+# ← TO RE-ENABLE: replace the {} below with the full probe config once the issue is resolved
+livenessProbe: {}
+# livenessProbe:
+#   httpGet:
+#     path: /health    # tests real app health endpoint
+#     port: 8080
+#   initialDelaySeconds: 10   # wait 10s before first check (app startup time)
+#   periodSeconds: 10         # check every 10s
+#   timeoutSeconds: 1         # fail if no response within 1s
+#   failureThreshold: 3       # restart pod after 3 consecutive failures
 
-readinessProbe:
-  httpGet:
-    path: /health    # tests real app health endpoint
-    port: 8080
-  initialDelaySeconds: 5    # wait 5s before first check (less than liveness)
-  periodSeconds: 10         # check every 10s
-  timeoutSeconds: 1         # fail if no response within 1s
-  failureThreshold: 3       # remove from service after 3 consecutive failures
+readinessProbe: {}
+# readinessProbe:
+#   httpGet:
+#     path: /health    # tests real app health endpoint
+#     port: 8080
+#   initialDelaySeconds: 5    # wait 5s before first check (less than liveness)
+#   periodSeconds: 10         # check every 10s
+#   timeoutSeconds: 1         # fail if no response within 1s
+#   failureThreshold: 3       # remove from service after 3 consecutive failures
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
