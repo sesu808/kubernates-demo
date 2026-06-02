@@ -11,10 +11,12 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v7d750a7"
+  tag: "vc98da3b"   # ← fixed: was v7d750a7 which doesn't exist in ECR
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
-imagePullSecrets: []
+imagePullSecrets:
+  - name: ecr-secret   # ← fixed: added ECR pull secret for private registry access
+
 # This is to override the chart name.
 nameOverride: ""
 fullnameOverride: ""
@@ -56,11 +58,8 @@ service:
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 8080
   targetPort: 8080
-  #containerPort: 8080   # whatever the key is in your values.yaml
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
-     # added — must match app port
-
 ingress:
   enabled: true
   className: "alb"
@@ -81,55 +80,27 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
-          # pathType: ImplementationSpecific 
   tls: []
   #  - secretName: chart-example-tls      # uncomment for TLS
   #    hosts:
   #      - chart-example.local
 
 # -- Expose the service via gateway-api HTTPRoute
-# Requires Gateway API resources and suitable controller installed within the cluster
-# (see: https://gateway-api.sigs.k8s.io/guides/)
 httpRoute:
-  # HTTPRoute enabled.
   enabled: false
-  # HTTPRoute annotations.
   annotations: {}
-  # Which Gateways this Route is attached to.
   parentRefs:
   - name: gateway
     sectionName: http
-    # namespace: default
-  # Hostnames matching HTTP header.
   hostnames:
   - chart-example.local
-  # List of rules and filters applied.
   rules:
   - matches:
     - path:
         type: PathPrefix
         value: /headers
-  #   filters:
-  #   - type: RequestHeaderModifier
-  #     requestHeaderModifier:
-  #       set:
-  #       - name: My-Overwrite-Header
-  #         value: this-is-the-only-value
-  #       remove:
-  #       - User-Agent
-  # - matches:
-  #   - path:
-  #       type: PathPrefix
-  #       value: /echo
-  #     headers:
-  #     - name: version
-  #       value: v2
 
 resources:
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   limits:
     cpu: 100m
     memory: 128Mi
@@ -140,7 +111,7 @@ resources:
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
-    path: /health    # changed from / to /health — tests real app health endpoint
+    path: /health    # tests real app health endpoint
     port: 8080
   initialDelaySeconds: 10   # wait 10s before first check (app startup time)
   periodSeconds: 10         # check every 10s
@@ -149,7 +120,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /health    # changed from / to /health — tests real app health endpoint
+    path: /health    # tests real app health endpoint
     port: 8080
   initialDelaySeconds: 5    # wait 5s before first check (less than liveness)
   periodSeconds: 10         # check every 10s
@@ -166,16 +137,9 @@ autoscaling:
 
 # Additional volumes on the output Deployment definition.
 volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
 
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
 
 # -- Node Selector
 # Schedule pods only on nodes with specific labels
@@ -183,69 +147,33 @@ volumeMounts: []
 # Use case: Run app only on specific node groups (e.g. application nodes, not system nodes)
 # More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
 nodeSelector:
-  # Schedule pods only on nodes belonging to ng-default nodegroup
-  alpha.eksctl.io/nodegroup-name: ng-default
-  # -- Other examples (uncomment to use):
-  # node-type: application          # custom label on node
-  # kubernetes.io/arch: amd64       # only run on amd64 architecture nodes
-  # node.kubernetes.io/instance-type: t3.medium  # only run on t3.medium instances
+  alpha.eksctl.io/nodegroup-name: ng-default   # ← correct: matches your actual EKS node group
 
 # -- Tolerations
 # Allow pods to be scheduled on tainted nodes
-# How it works: If a node has a taint, only pods with matching toleration can be scheduled on it
-# Use case: Allow app to run on spot instances or dedicated nodes that have taints
-# More info: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
 tolerations:
-  # Tolerate spot instance nodes (AWS spot instances are often tainted)
   - key: "spot"
     operator: "Equal"
     value: "true"
     effect: "NoSchedule"
-  # -- Other examples (uncomment to use):
-  # - key: "dedicated"              # tolerate dedicated nodes
-  #   operator: "Equal"
-  #   value: "application"
-  #   effect: "NoSchedule"
-  #
-  # - key: "node.kubernetes.io/not-ready"   # tolerate temporarily not-ready nodes
-  #   operator: "Exists"
-  #   effect: "NoExecute"
-  #   tolerationSeconds: 300
 
 # -- Affinity
-# Advanced pod scheduling rules — more powerful than nodeSelector
-# How it works: Define rules for where pods CAN or CANNOT be scheduled
-# Two types:
-#   nodeAffinity    — which NODES the pod can run on
-#   podAntiAffinity — ensure pods are spread across different nodes (avoid single point of failure)
-# More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
+# Advanced pod scheduling rules
 affinity:
   # nodeAffinity: Schedule pods only on nodes in specific availability zones
   nodeAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
-      # Hard rule — pod MUST be scheduled on nodes matching this
       nodeSelectorTerms:
       - matchExpressions:
         - key: topology.kubernetes.io/zone
           operator: In
           values:
-          - ap-south-1a   # allow scheduling in ap-south-1a
-          - ap-south-1b   # allow scheduling in ap-south-1b
-    # -- Other nodeAffinity examples (uncomment to use):
-    # preferredDuringSchedulingIgnoredDuringExecution:
-    #   # Soft rule — pod PREFERS nodes matching this but not required
-    #   - weight: 1
-    #     preference:
-    #       matchExpressions:
-    #       - key: node-type
-    #         operator: In
-    #         values:
-    #         - application
+          - ap-south-1a   # matches your node ip-192-168-22-118
+          - ap-south-1b   # matches your node ip-192-168-39-187
 
   # podAntiAffinity: Spread pods across different nodes to avoid single point of failure
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:
-    # Soft rule — PREFER to spread pods across different nodes
     - weight: 100
       podAffinityTerm:
         labelSelector:
@@ -254,15 +182,4 @@ affinity:
             operator: In
             values:
             - kubernates-demo-test
-        # topology key defines the scope — hostname means each node is unique
         topologyKey: kubernetes.io/hostname
-    # -- Other podAntiAffinity examples (uncomment to use):
-    # requiredDuringSchedulingIgnoredDuringExecution:
-    #   # Hard rule — pods MUST NOT be on the same node
-    #   - labelSelector:
-    #       matchExpressions:
-    #       - key: app.kubernetes.io/name
-    #         operator: In
-    #         values:
-    #         - kubernates-demo-test
-    #     topologyKey: kubernetes.io/hostname
