@@ -68,20 +68,25 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /health
-    alb.ingress.kubernetes.io/healthcheck-port: "8080"          # added
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'    # added
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz        # argocd health endpoint
+    alb.ingress.kubernetes.io/healthcheck-port: "8080"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/backend-protocol: HTTP            # argocd runs in insecure mode
     alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=10
+    # alb.ingress.kubernetes.io/scheme: internal                # uncomment for internal ALB
+    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]' # uncomment for HTTPS
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:REGION:ACCOUNT:certificate/CERT-ID  # uncomment for HTTPS
   hosts:
-    - host: ""
+    - host: "argocd.yourdomain.com"       # replace with your actual domain
       paths:
         - path: /
           pathType: Prefix
-          # pathType: ImplementationSpecific 
+          # pathType: ImplementationSpecific
   tls: []
-  #  - secretName: chart-example-tls
+  #  - secretName: chart-example-tls      # uncomment for TLS
   #    hosts:
   #      - chart-example.local
+
 # -- Expose the service via gateway-api HTTPRoute
 # Requires Gateway API resources and suitable controller installed within the cluster
 # (see: https://gateway-api.sigs.k8s.io/guides/)
