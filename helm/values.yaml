@@ -150,8 +150,8 @@ volumeMounts: []
 # How it works: Kubernetes will only place pods on nodes that match ALL labels specified here
 # Use case: Run app only on specific node groups (e.g. application nodes, not system nodes)
 # More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
-nodeSelector:
-  alpha.eksctl.io/nodegroup-name: ng-default   # ← correct: matches your actual EKS node group
+nodeSelector: {}
+  #alpha.eksctl.io/nodegroup-name: ng-default   # ← correct: matches your actual EKS node group
 
 # -- Tolerations
 # Allow pods to be scheduled on tainted nodes
