@@ -145,7 +145,7 @@ volumes: []
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts: []
 
-# -- Node Selector
+# -- Node Selector 
 # Schedule pods only on nodes with specific labels
 # How it works: Kubernetes will only place pods on nodes that match ALL labels specified here
 # Use case: Run app only on specific node groups (e.g. application nodes, not system nodes)
