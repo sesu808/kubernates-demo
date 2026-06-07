@@ -72,7 +72,7 @@ ingress:
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
     alb.ingress.kubernetes.io/backend-protocol: HTTP            # argocd runs in insecure mode
     alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=10
-    # alb.ingress.kubernetes.io/scheme: internal                # uncomment for internal ALB
+    # alb.ingress.kubernetes.io/scheme: internal              # uncomment for internal ALB
     # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]' # uncomment for HTTPS
     # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:REGION:ACCOUNT:certificate/CERT-ID  # uncomment for HTTPS
   hosts:
