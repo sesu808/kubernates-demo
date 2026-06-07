@@ -83,7 +83,7 @@ ingress:
   tls: []
   #  - secretName: chart-example-tls      # uncomment for TLS
   #    hosts:
-  #      - chart-example.local
+  #      - chart-example.local 
 
 # -- Expose the service via gateway-api HTTPRoute
 httpRoute:
