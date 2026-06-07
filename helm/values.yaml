@@ -67,16 +67,12 @@ ingress:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /healthz        # argocd health endpoint
-    alb.ingress.kubernetes.io/healthcheck-port: "8080"
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
-    alb.ingress.kubernetes.io/backend-protocol: HTTP            # argocd runs in insecure mode
-    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=10
     # alb.ingress.kubernetes.io/scheme: internal              # uncomment for internal ALB
     # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]' # uncomment for HTTPS
     # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:REGION:ACCOUNT:certificate/CERT-ID  # uncomment for HTTPS
   hosts:
-    - host: ""       # replace with your actual domain
+    - host: ""       # leave empty — ALB will assign DNS automatically
       paths:
         - path: /
           pathType: Prefix
@@ -145,7 +141,7 @@ volumes: []
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts: []
 
-# -- Node Selector 
+# -- Node Selector
 # Schedule pods only on nodes with specific labels
 # How it works: Kubernetes will only place pods on nodes that match ALL labels specified here
 # Use case: Run app only on specific node groups (e.g. application nodes, not system nodes)
