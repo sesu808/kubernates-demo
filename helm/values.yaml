@@ -76,7 +76,7 @@ ingress:
     # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]' # uncomment for HTTPS
     # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:REGION:ACCOUNT:certificate/CERT-ID  # uncomment for HTTPS
   hosts:
-    - host: "argocd.yourdomain.com"       # replace with your actual domain
+    - host: ""       # replace with your actual domain
       paths:
         - path: /
           pathType: Prefix
