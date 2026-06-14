@@ -56,12 +56,9 @@ node {
     stage('ArgoCD - Create & Sync App') {
         withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
             sh """
-                argocd login ${ARGOCD_SERVER}:443 \
-                    --auth-token=\$ARGOCD_AUTH_TOKEN \
-                    --grpc-web \
-                    --insecure
+                ARGOCD_OPTS="--server ${ARGOCD_SERVER}:443 --auth-token \$ARGOCD_AUTH_TOKEN --grpc-web --insecure"
 
-                argocd app create ${APP_NAME} \
+                argocd app create ${APP_NAME} \$ARGOCD_OPTS \
                     --repo ${REPO_URL} \
                     --path ${HELM_PATH} \
                     --dest-server ${DEST_SERVER} \
@@ -70,15 +67,13 @@ node {
                     --helm-set image.repository=${ECR_REGISTRY}/${ECR_REPO_NAME} \
                     --helm-set image.tag=${IMAGE_TAG} \
                     --sync-policy automated \
+                    --sync-option CreateNamespace=true \
                     --auto-prune \
                     --self-heal \
                     --upsert
 
-                argocd app sync ${APP_NAME} --grpc-web
-                argocd app wait ${APP_NAME} \
-                    --health \
-                    --timeout 180 \
-                    --grpc-web
+                argocd app sync ${APP_NAME} \$ARGOCD_OPTS
+                argocd app wait ${APP_NAME} \$ARGOCD_OPTS --health --timeout 180
             """
         }
     }
@@ -86,7 +81,7 @@ node {
     stage('Verify Deployment') {
         withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
             sh """
-                argocd app get ${APP_NAME} --grpc-web
+                argocd app get ${APP_NAME} --server ${ARGOCD_SERVER}:443 --auth-token \$ARGOCD_AUTH_TOKEN --grpc-web --insecure
             """
         }
     }
