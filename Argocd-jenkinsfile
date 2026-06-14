@@ -56,7 +56,7 @@ node {
     stage('ArgoCD - Create & Sync App') {
         withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
             sh """
-                argocd login ${ARGOCD_SERVER} \
+                argocd login ${ARGOCD_SERVER}:443 \
                     --auth-token \$ARGOCD_AUTH_TOKEN \
                     --grpc-web \
                     --insecure
