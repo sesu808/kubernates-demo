@@ -95,3 +95,4 @@ node {
         sh "docker rmi ${IMAGE_FULL} || true"
     }
 }
+#1
