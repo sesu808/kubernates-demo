@@ -1,17 +1,17 @@
 node {
     // ─── CONFIG ───────────────────────────────────────────────
-    def AWS_REGION       = 'us-east-1'
-    def AWS_ACCOUNT_ID   = '123456789012'
-    def ECR_REPO_NAME    = 'my-app'
-    def IMAGE_TAG        = "${env.BUILD_NUMBER}"   // or use GIT_COMMIT
+    def AWS_REGION       = 'ap-south-1'
+    def AWS_ACCOUNT_ID   = '624858524005'
+    def ECR_REPO_NAME    = 'kubernates-demo'
+    def IMAGE_TAG        = "${env.BUILD_NUMBER}"
     def ECR_REGISTRY     = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
     def IMAGE_FULL       = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
 
-    def ARGOCD_SERVER    = 'argocd.example.com'   // no https://
-    def APP_NAME         = 'my-app'
-    def REPO_URL         = 'https://github.com/org/my-app'
-    def HELM_PATH        = 'helm/my-app'           // path to Helm chart in repo
-    def DEST_NAMESPACE   = 'my-namespace'
+    def ARGOCD_SERVER    = 'a1bcd79c106cc44d08125105419242e4-338524828.ap-south-1.elb.amazonaws.com'
+    def APP_NAME         = 'kubernates-demo'
+    def REPO_URL         = 'https://github.com/sesu808/kubernates-demo'
+    def HELM_PATH        = 'helm'
+    def DEST_NAMESPACE   = 'production'
     def DEST_SERVER      = 'https://kubernetes.default.svc'
     def REVISION         = 'main'
     // ──────────────────────────────────────────────────────────
@@ -34,32 +34,33 @@ node {
                 export AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY
                 export AWS_DEFAULT_REGION=${AWS_REGION}
 
-                # ECR login
                 aws ecr get-login-password --region ${AWS_REGION} | \
                     docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
-                # Create ECR repo if it doesn't exist
                 aws ecr describe-repositories --repository-names ${ECR_REPO_NAME} \
                     --region ${AWS_REGION} || \
                 aws ecr create-repository --repository-name ${ECR_REPO_NAME} \
                     --region ${AWS_REGION}
 
-                # Push image
                 docker push ${IMAGE_FULL}
             """
         }
     }
 
+    stage('Create Namespace (if not exists)') {
+        sh """
+            kubectl get namespace ${DEST_NAMESPACE} || kubectl create namespace ${DEST_NAMESPACE}
+        """
+    }
+
     stage('ArgoCD - Create & Sync App') {
         withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
             sh """
-                # Login
                 argocd login ${ARGOCD_SERVER} \
                     --auth-token \$ARGOCD_AUTH_TOKEN \
                     --grpc-web \
                     --insecure
 
-                # Create or update the ArgoCD app
                 argocd app create ${APP_NAME} \
                     --repo ${REPO_URL} \
                     --path ${HELM_PATH} \
@@ -73,7 +74,6 @@ node {
                     --self-heal \
                     --upsert
 
-                # Sync and wait for healthy state
                 argocd app sync ${APP_NAME} --grpc-web
                 argocd app wait ${APP_NAME} \
                     --health \
