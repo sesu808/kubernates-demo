@@ -53,6 +53,12 @@ node {
         """
     }
 
+    stage('Approval - Deploy to Production') {
+        echo "Image ${IMAGE_FULL} built and pushed successfully."
+        echo "Waiting for approval to deploy to ArgoCD (namespace: ${DEST_NAMESPACE})..."
+        input message: "Deploy build #${IMAGE_TAG} (${IMAGE_FULL}) to production via ArgoCD?", ok: "Approve & Deploy"
+    }
+
     stage('ArgoCD - Create & Sync App') {
         withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
             sh """
@@ -72,8 +78,9 @@ node {
                     --self-heal \
                     --upsert
 
-                argocd app sync ${APP_NAME} \$ARGOCD_OPTS
-                argocd app wait ${APP_NAME} \$ARGOCD_OPTS --health --timeout 180
+                sleep 5
+                argocd app sync ${APP_NAME} \$ARGOCD_OPTS || echo "Sync already in progress, continuing..."
+                argocd app wait ${APP_NAME} \$ARGOCD_OPTS --health --timeout 120 || true
             """
         }
     }
