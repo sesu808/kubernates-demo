@@ -1,20 +1,24 @@
 node {
 
-    // Prevent Jenkins → GitHub → Jenkins infinite loop
-    stage('Prevent Loop') {
-        checkout scm
+def proceed = true
 
-        def msg = sh(
-            script: "git log -1 --pretty=%B",
-            returnStdout: true
-        ).trim()
+stage('Prevent Loop') {
+    checkout scm
 
-        if (msg.contains('[skip ci]')) {
-            echo "Skipping CI-generated commit"
-            currentBuild.result = 'SUCCESS'
-            return
-        }
+    def msg = sh(
+        script: "git log -1 --pretty=%B",
+        returnStdout: true
+    ).trim()
+
+    echo "Latest Commit Message: ${msg}"
+
+    if (msg.contains('[skip ci]')) {
+        echo "CI-generated commit detected. Skipping pipeline."
+        proceed = false
     }
+}
+
+if (proceed) {
 
     // AWS Configuration
     def AWS_REGION     = 'ap-south-1'
@@ -107,4 +111,13 @@ node {
             docker rmi ${IMAGE_FULL} || true
         """
     }
+
+} else {
+
+    stage('Skipped') {
+        echo "Build skipped because commit contains [skip ci]"
+    }
+
+}
+
 }
