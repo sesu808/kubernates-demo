@@ -1,18 +1,16 @@
 node {
 
 ```
-// ─── CONFIG ───────────────────────────────────────────────
-def AWS_REGION       = 'ap-south-1'
-def AWS_ACCOUNT_ID   = '624858524005'
-def ECR_REPO_NAME    = 'sample-app'
+def AWS_REGION     = 'ap-south-1'
+def AWS_ACCOUNT_ID = '624858524005'
+def ECR_REPO_NAME  = 'sample-app'
 
-def IMAGE_TAG        = "${env.BUILD_NUMBER}"
+def IMAGE_TAG      = "${env.BUILD_NUMBER}"
 
-def ECR_REGISTRY     = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-def IMAGE_FULL       = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
+def ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+def IMAGE_FULL     = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
 
-def DEST_NAMESPACE   = 'production'
-// ──────────────────────────────────────────────────────────
+def DEST_NAMESPACE = 'production'
 
 stage('Checkout') {
     checkout scm
