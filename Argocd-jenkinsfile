@@ -1,49 +1,60 @@
 node {
 
-def proceed = true
+    // ===============================
+    // PREVENT LOOP
+    // ===============================
+    stage('Prevent Loop') {
 
-stage('Prevent Loop') {
-    checkout scm
+        checkout scm
 
-    def msg = sh(
-        script: "git log -1 --pretty=%B",
-        returnStdout: true
-    ).trim()
+        def msg = sh(
+            script: "git log -1 --pretty=%B",
+            returnStdout: true
+        ).trim()
 
-    echo "Latest Commit Message: ${msg}"
+        echo "Latest Commit Message: ${msg}"
 
-    if (msg.contains('[skip ci]')) {
-        echo "CI-generated commit detected. Skipping pipeline."
-        proceed = false
+        if (msg.contains('[skip ci]')) {
+            currentBuild.result = 'SUCCESS'
+            error('Skipping CI-generated commit')
+        }
     }
-}
 
-if (proceed) {
-
-    // AWS Configuration
+    // ===============================
+    // CONFIG
+    // ===============================
     def AWS_REGION     = 'ap-south-1'
     def AWS_ACCOUNT_ID = '624858524005'
     def ECR_REPO_NAME  = 'sample-app'
 
-    // Image Configuration
     def IMAGE_TAG      = "${env.BUILD_NUMBER}"
     def ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
     def IMAGE_FULL     = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
 
-    // Kubernetes
     def DEST_NAMESPACE = 'production'
 
+    // ===============================
+    // CHECKOUT
+    // ===============================
     stage('Checkout') {
         checkout scm
     }
 
+    // ===============================
+    // BUILD IMAGE
+    // ===============================
     stage('Build Docker Image') {
+
         sh """
             docker build -t ${IMAGE_FULL} .
         """
     }
 
+    // ===============================
+    // PUSH TO ECR
+    // ===============================
     stage('Push to AWS ECR') {
+
         withCredentials([
             string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
             string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
@@ -69,14 +80,22 @@ if (proceed) {
         }
     }
 
+    // ===============================
+    // CREATE NAMESPACE
+    // ===============================
     stage('Create Namespace') {
+
         sh """
             kubectl get namespace ${DEST_NAMESPACE} || \
             kubectl create namespace ${DEST_NAMESPACE}
         """
     }
 
+    // ===============================
+    // UPDATE HELM VALUES
+    // ===============================
     stage('Update Helm Values') {
+
         withCredentials([
             usernamePassword(
                 credentialsId: 'github-pat',
@@ -95,7 +114,11 @@ if (proceed) {
 
                 git add helm/values.yaml
 
-                git diff --cached --quiet || \
+                if git diff --cached --quiet; then
+                    echo "No changes detected"
+                    exit 0
+                fi
+
                 git commit -m "[skip ci] Update image tag to ${IMAGE_TAG}"
 
                 git remote set-url origin \
@@ -106,18 +129,13 @@ if (proceed) {
         }
     }
 
+    // ===============================
+    // CLEANUP
+    // ===============================
     stage('Cleanup') {
+
         sh """
             docker rmi ${IMAGE_FULL} || true
         """
     }
-
-} else {
-
-    stage('Skipped') {
-        echo "Build skipped because commit contains [skip ci]"
-    }
-
-}
-
 }
