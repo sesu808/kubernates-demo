@@ -7,7 +7,7 @@ node {
     def ECR_REGISTRY     = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
     def IMAGE_FULL       = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
 
-    def ARGOCD_SERVER    = 'a7d65d928b5d645e98e6624e2ace9e8b-964271774.ap-south-1.elb.amazonaws.com'
+    def ARGOCD_SERVER    = 'aa00717be9d194278a767c41b418dff4-786546521.ap-south-1.elb.amazonaws.com'
     def APP_NAME         = 'kubernates-demo'
     def REPO_URL         = 'https://github.com/sesu808/kubernates-demo'
     def HELM_PATH        = 'helm'
@@ -62,7 +62,7 @@ node {
     stage('ArgoCD - Create & Sync App') {
         withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
             sh """
-                ARGOCD_OPTS="--server ${ARGOCD_SERVER}:443 --auth-token \$ARGOCD_AUTH_TOKEN --grpc-web --insecure"
+                ARGOCD_OPTS="--server ${ARGOCD_SERVER} --auth-token \$ARGOCD_AUTH_TOKEN --insecure"
 
                 argocd app create ${APP_NAME} \$ARGOCD_OPTS \
                     --repo ${REPO_URL} \
@@ -88,7 +88,10 @@ node {
     stage('Verify Deployment') {
         withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
             sh """
-                argocd app get ${APP_NAME} --server ${ARGOCD_SERVER}:443 --auth-token \$ARGOCD_AUTH_TOKEN --grpc-web --insecure
+                argocd app get ${APP_NAME} \
+                    --server ${ARGOCD_SERVER} \
+                    --auth-token \$ARGOCD_AUTH_TOKEN \
+                    --insecure
             """
         }
     }
