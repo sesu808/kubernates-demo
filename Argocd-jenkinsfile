@@ -1,102 +1,82 @@
 node {
-    // ─── CONFIG ───────────────────────────────────────────────
-    def AWS_REGION       = 'ap-south-1'
-    def AWS_ACCOUNT_ID   = '624858524005'
-    def ECR_REPO_NAME    = 'sample-app'
-    def IMAGE_TAG        = "${env.BUILD_NUMBER}"
-    def ECR_REGISTRY     = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-    def IMAGE_FULL       = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
 
-    def ARGOCD_SERVER    = 'aa00717be9d194278a767c41b418dff4-786546521.ap-south-1.elb.amazonaws.com'
-    def APP_NAME         = 'kubernates-demo'
-    def REPO_URL         = 'https://github.com/sesu808/kubernates-demo'
-    def HELM_PATH        = 'helm'
-    def DEST_NAMESPACE   = 'production'
-    def DEST_SERVER      = 'https://kubernetes.default.svc'
-    def REVISION         = 'main'
-    // ──────────────────────────────────────────────────────────
+```
+// ─── CONFIG ───────────────────────────────────────────────
+def AWS_REGION       = 'ap-south-1'
+def AWS_ACCOUNT_ID   = '624858524005'
+def ECR_REPO_NAME    = 'sample-app'
 
-    stage('Checkout') {
-        checkout scm
-    }
+def IMAGE_TAG        = "${env.BUILD_NUMBER}"
 
-    stage('Build Docker Image') {
-        sh "docker build -t ${IMAGE_FULL} ."
-    }
+def ECR_REGISTRY     = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+def IMAGE_FULL       = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
 
-    stage('Push to AWS ECR') {
-        withCredentials([
-            string(credentialsId: 'aws-access-key-id',     variable: 'AWS_ACCESS_KEY_ID'),
-            string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
-        ]) {
-            sh """
-                export AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID
-                export AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY
-                export AWS_DEFAULT_REGION=${AWS_REGION}
+def DEST_NAMESPACE   = 'production'
+// ──────────────────────────────────────────────────────────
 
-                aws ecr get-login-password --region ${AWS_REGION} | \
-                    docker login --username AWS --password-stdin ${ECR_REGISTRY}
+stage('Checkout') {
+    checkout scm
+}
 
-                aws ecr describe-repositories --repository-names ${ECR_REPO_NAME} \
-                    --region ${AWS_REGION} || \
-                aws ecr create-repository --repository-name ${ECR_REPO_NAME} \
-                    --region ${AWS_REGION}
+stage('Build Docker Image') {
+    sh """
+        docker build -t ${IMAGE_FULL} .
+    """
+}
 
-                docker push ${IMAGE_FULL}
-            """
-        }
-    }
+stage('Push to AWS ECR') {
+    withCredentials([
+        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+    ]) {
 
-    stage('Create Namespace (if not exists)') {
         sh """
-            kubectl get namespace ${DEST_NAMESPACE} || kubectl create namespace ${DEST_NAMESPACE}
+            export AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID
+            export AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY
+            export AWS_DEFAULT_REGION=${AWS_REGION}
+
+            aws ecr get-login-password --region ${AWS_REGION} | \
+            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+            aws ecr describe-repositories \
+                --repository-names ${ECR_REPO_NAME} \
+                --region ${AWS_REGION} || \
+            aws ecr create-repository \
+                --repository-name ${ECR_REPO_NAME} \
+                --region ${AWS_REGION}
+
+            docker push ${IMAGE_FULL}
         """
     }
+}
 
-    stage('Approval - Deploy to Production') {
-        echo "Image ${IMAGE_FULL} built and pushed successfully."
-        echo "Waiting for approval to deploy to ArgoCD (namespace: ${DEST_NAMESPACE})..."
-        input message: "Deploy build #${IMAGE_TAG} (${IMAGE_FULL}) to production via ArgoCD?", ok: "Approve & Deploy"
-    }
+stage('Create Namespace (if not exists)') {
+    sh """
+        kubectl get namespace ${DEST_NAMESPACE} || \
+        kubectl create namespace ${DEST_NAMESPACE}
+    """
+}
 
-    stage('ArgoCD - Create & Sync App') {
-        withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
-            sh """
-                ARGOCD_OPTS="--server ${ARGOCD_SERVER} --auth-token \$ARGOCD_AUTH_TOKEN --insecure"
+stage('Update Helm Values') {
+    sh """
+        sed -i 's/tag:.*/tag: "${IMAGE_TAG}"/' helm/values.yaml
 
-                argocd app create ${APP_NAME} \$ARGOCD_OPTS \
-                    --repo ${REPO_URL} \
-                    --path ${HELM_PATH} \
-                    --dest-server ${DEST_SERVER} \
-                    --dest-namespace ${DEST_NAMESPACE} \
-                    --revision ${REVISION} \
-                    --helm-set image.repository=${ECR_REGISTRY}/${ECR_REPO_NAME} \
-                    --helm-set image.tag=${IMAGE_TAG} \
-                    --sync-policy automated \
-                    --sync-option CreateNamespace=true \
-                    --auto-prune \
-                    --self-heal \
-                    --upsert
+        git config user.email "jenkins@local"
+        git config user.name "jenkins"
 
-                sleep 5
-                argocd app sync ${APP_NAME} \$ARGOCD_OPTS || echo "Sync already in progress, continuing..."
-                argocd app wait ${APP_NAME} \$ARGOCD_OPTS --health --timeout 120 || true
-            """
-        }
-    }
+        git add helm/values.yaml
 
-    stage('Verify Deployment') {
-        withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
-            sh """
-                argocd app get ${APP_NAME} \
-                    --server ${ARGOCD_SERVER} \
-                    --auth-token \$ARGOCD_AUTH_TOKEN \
-                    --insecure
-            """
-        }
-    }
+        git commit -m "Update image tag to ${IMAGE_TAG}" || true
 
-    stage('Cleanup') {
-        sh "docker rmi ${IMAGE_FULL} || true"
-    }
+        git push origin main
+    """
+}
+
+stage('Cleanup') {
+    sh """
+        docker rmi ${IMAGE_FULL} || true
+    """
+}
+```
+
 }
