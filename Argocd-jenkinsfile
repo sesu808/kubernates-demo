@@ -1,80 +1,77 @@
 node {
 
-```
-def AWS_REGION     = 'ap-south-1'
-def AWS_ACCOUNT_ID = '624858524005'
-def ECR_REPO_NAME  = 'sample-app'
+    // AWS Configuration
+    def AWS_REGION     = 'ap-south-1'
+    def AWS_ACCOUNT_ID = '624858524005'
+    def ECR_REPO_NAME  = 'sample-app'
 
-def IMAGE_TAG      = "${env.BUILD_NUMBER}"
+    // Image Configuration
+    def IMAGE_TAG      = "${env.BUILD_NUMBER}"
+    def ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+    def IMAGE_FULL     = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
 
-def ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-def IMAGE_FULL     = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
+    // Kubernetes
+    def DEST_NAMESPACE = 'production'
 
-def DEST_NAMESPACE = 'production'
+    stage('Checkout') {
+        checkout scm
+    }
 
-stage('Checkout') {
-    checkout scm
-}
-
-stage('Build Docker Image') {
-    sh """
-        docker build -t ${IMAGE_FULL} .
-    """
-}
-
-stage('Push to AWS ECR') {
-    withCredentials([
-        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
-        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
-    ]) {
-
+    stage('Build Docker Image') {
         sh """
-            export AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID
-            export AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY
-            export AWS_DEFAULT_REGION=${AWS_REGION}
-
-            aws ecr get-login-password --region ${AWS_REGION} | \
-            docker login --username AWS --password-stdin ${ECR_REGISTRY}
-
-            aws ecr describe-repositories \
-                --repository-names ${ECR_REPO_NAME} \
-                --region ${AWS_REGION} || \
-            aws ecr create-repository \
-                --repository-name ${ECR_REPO_NAME} \
-                --region ${AWS_REGION}
-
-            docker push ${IMAGE_FULL}
+            docker build -t ${IMAGE_FULL} .
         """
     }
-}
 
-stage('Create Namespace (if not exists)') {
-    sh """
-        kubectl get namespace ${DEST_NAMESPACE} || \
-        kubectl create namespace ${DEST_NAMESPACE}
-    """
-}
+    stage('Push to AWS ECR') {
+        withCredentials([
+            string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+            string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+        ]) {
 
-stage('Update Helm Values') {
-    sh """
-        sed -i 's/tag:.*/tag: "${IMAGE_TAG}"/' helm/values.yaml
+            sh """
+                export AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID
+                export AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY
+                export AWS_DEFAULT_REGION=${AWS_REGION}
 
-        git config user.email "jenkins@local"
-        git config user.name "jenkins"
+                aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
-        git add helm/values.yaml
+                aws ecr describe-repositories \
+                    --repository-names ${ECR_REPO_NAME} \
+                    --region ${AWS_REGION} || \
+                aws ecr create-repository \
+                    --repository-name ${ECR_REPO_NAME} \
+                    --region ${AWS_REGION}
 
-        git commit -m "Update image tag to ${IMAGE_TAG}" || true
+                docker push ${IMAGE_FULL}
+            """
+        }
+    }
 
-        git push origin main
-    """
-}
+    stage('Create Namespace') {
+        sh """
+            kubectl get namespace ${DEST_NAMESPACE} || kubectl create namespace ${DEST_NAMESPACE}
+        """
+    }
 
-stage('Cleanup') {
-    sh """
-        docker rmi ${IMAGE_FULL} || true
-    """
-}
-```
+    stage('Update Helm Values') {
+        sh """
+            sed -i 's/tag:.*/tag: "${IMAGE_TAG}"/' helm/values.yaml
 
+            git config user.email "jenkins@local"
+            git config user.name "jenkins"
+
+            git add helm/values.yaml
+
+            git commit -m "Update image tag to ${IMAGE_TAG}" || true
+
+            git push origin main
+        """
+    }
+
+    stage('Cleanup') {
+        sh """
+            docker rmi ${IMAGE_FULL} || true
+        """
+    }
 }
