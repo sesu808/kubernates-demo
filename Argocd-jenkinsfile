@@ -28,13 +28,13 @@ node {
             string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
             string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
         ]) {
-
             sh """
                 export AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID
                 export AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY
                 export AWS_DEFAULT_REGION=${AWS_REGION}
 
-                aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                aws ecr get-login-password --region ${AWS_REGION} | \
+                docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
                 aws ecr describe-repositories \
                     --repository-names ${ECR_REPO_NAME} \
@@ -50,23 +50,39 @@ node {
 
     stage('Create Namespace') {
         sh """
-            kubectl get namespace ${DEST_NAMESPACE} || kubectl create namespace ${DEST_NAMESPACE}
+            kubectl get namespace ${DEST_NAMESPACE} || \
+            kubectl create namespace ${DEST_NAMESPACE}
         """
     }
 
     stage('Update Helm Values') {
-        sh """
-            sed -i 's/tag:.*/tag: "${IMAGE_TAG}"/' helm/values.yaml
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'github-pat',
+                usernameVariable: 'GITHUB_USER',
+                passwordVariable: 'GITHUB_TOKEN'
+            )
+        ]) {
 
-            git config user.email "jenkins@local"
-            git config user.name "jenkins"
+            sh """
+                git checkout -B main origin/main || git checkout main
 
-            git add helm/values.yaml
+                sed -i 's/tag:.*/tag: "${IMAGE_TAG}"/' helm/values.yaml
 
-            git commit -m "Update image tag to ${IMAGE_TAG}" || true
+                git config user.email "saiprasad8112@gmail.com"
+                git config user.name "sesu808"
 
-            git push origin main
-        """
+                git add helm/values.yaml
+
+                git diff --cached --quiet || \
+                git commit -m "Update image tag to ${IMAGE_TAG}"
+
+                git remote set-url origin \
+                https://\$GITHUB_USER:\$GITHUB_TOKEN@github.com/sesu808/kubernates-demo.git
+
+                git push origin HEAD:main
+            """
+        }
     }
 
     stage('Cleanup') {
