@@ -10,7 +10,7 @@ image:
   repository: 624858524005.dkr.ecr.ap-south-1.amazonaws.com/sample-app
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
+  # Overrides the image tag whose default is the chart appVersion. 
   tag: "280"
 
 spec:
