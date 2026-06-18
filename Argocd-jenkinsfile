@@ -1,129 +1,145 @@
-node {
+pipeline {
+    agent any
 
-// ===============================
-// PREVENT LOOP
-// ===============================
-stage('Prevent Loop') {
+    stages {
+        // ===============================
+        // PREVENT LOOP - MUST BE FIRST
+        // ===============================
+        stage('Prevent Loop') {
+            steps {
+                checkout scm
+                script {
+                    def msg = sh(
+                        script: "git log -1 --pretty=%B",
+                        returnStdout: true
+                    ).trim()
+                    echo "Latest Commit Message: ${msg}"
+                    if (msg.contains('[skip ci]')) {
+                        currentBuild.result = 'NOT_BUILT'
+                        error('Skipping CI-generated commit')
+                    }
+                }
+            }
+        }
 
-    checkout scm
+        // ===============================
+        // CHECKOUT
+        // ===============================
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
 
-    def msg = sh(
-        script: "git log -1 --pretty=%B",
-        returnStdout: true
-    ).trim()
+        // ===============================
+        // BUILD IMAGE
+        // ===============================
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    def AWS_REGION     = 'ap-south-1'
+                    def AWS_ACCOUNT_ID = '624858524005'
+                    def ECR_REPO_NAME  = 'sample-app'
+                    def IMAGE_TAG      = "${env.BUILD_NUMBER}"
+                    def ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                    def IMAGE_FULL     = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
 
-    echo "Latest Commit Message: ${msg}"
+                    env.IMAGE_FULL    = IMAGE_FULL
+                    env.IMAGE_TAG     = IMAGE_TAG
+                    env.ECR_REGISTRY  = ECR_REGISTRY
+                    env.AWS_REGION    = AWS_REGION
+                    env.ECR_REPO_NAME = ECR_REPO_NAME
 
-    if (msg.contains('[skip ci]')) {
-        currentBuild.result = 'SUCCESS'
-        error('Skipping CI-generated commit')
+                    sh "docker build -t ${IMAGE_FULL} ."
+                }
+            }
+        }
+
+        // ===============================
+        // PUSH TO ECR
+        // ===============================
+        stage('Push to AWS ECR') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
+                    sh """
+                        export AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID
+                        export AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY
+                        export AWS_DEFAULT_REGION=${env.AWS_REGION}
+
+                        aws ecr get-login-password --region ${env.AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${env.ECR_REGISTRY}
+
+                        aws ecr describe-repositories \
+                            --repository-names ${env.ECR_REPO_NAME} \
+                            --region ${env.AWS_REGION} || \
+                        aws ecr create-repository \
+                            --repository-name ${env.ECR_REPO_NAME} \
+                            --region ${env.AWS_REGION}
+
+                        docker push ${env.IMAGE_FULL}
+                    """
+                }
+            }
+        }
+
+        // ===============================
+        // UPDATE HELM VALUES
+        // ===============================
+        stage('Update Helm Values') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github-pat',
+                        usernameVariable: 'GITHUB_USER',
+                        passwordVariable: 'GITHUB_TOKEN'
+                    )
+                ]) {
+                    sh """
+                        git checkout -B main origin/main || git checkout main
+                        sed -i 's/tag:.*/tag: "${env.IMAGE_TAG}"/' helm/values.yaml
+                        git config user.email "saiprasad8112@gmail.com"
+                        git config user.name "sesu808"
+                        git add helm/values.yaml
+
+                        if git diff --cached --quiet; then
+                            echo "No changes detected"
+                            exit 0
+                        fi
+
+                        git commit -m "[skip ci] Update image tag to ${env.IMAGE_TAG}"
+                        git remote set-url origin \
+                            https://\$GITHUB_USER:\$GITHUB_TOKEN@github.com/sesu808/kubernates-demo.git
+                        git push origin HEAD:main
+                    """
+                }
+            }
+        }
+
+        // ===============================
+        // CLEANUP
+        // ===============================
+        stage('Cleanup') {
+            steps {
+                sh "docker rmi ${env.IMAGE_FULL} || true"
+            }
+        }
     }
-}
 
-// ===============================
-// CONFIG
-// ===============================
-def AWS_REGION     = 'ap-south-1'
-def AWS_ACCOUNT_ID = '624858524005'
-def ECR_REPO_NAME  = 'sample-app'
-
-def IMAGE_TAG    = "${env.BUILD_NUMBER}"
-def ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-def IMAGE_FULL   = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
-
-// ===============================
-// CHECKOUT
-// ===============================
-stage('Checkout') {
-    checkout scm
-}
-
-// ===============================
-// BUILD IMAGE
-// ===============================
-stage('Build Docker Image') {
-
-    sh """
-        docker build -t ${IMAGE_FULL} .
-    """
-}
-
-// ===============================
-// PUSH TO ECR
-// ===============================
-stage('Push to AWS ECR') {
-
-    withCredentials([
-        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
-        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
-    ]) {
-
-        sh """
-            export AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID
-            export AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY
-            export AWS_DEFAULT_REGION=${AWS_REGION}
-
-            aws ecr get-login-password --region ${AWS_REGION} | \
-            docker login --username AWS --password-stdin ${ECR_REGISTRY}
-
-            aws ecr describe-repositories \
-                --repository-names ${ECR_REPO_NAME} \
-                --region ${AWS_REGION} || \
-            aws ecr create-repository \
-                --repository-name ${ECR_REPO_NAME} \
-                --region ${AWS_REGION}
-
-            docker push ${IMAGE_FULL}
-        """
+    // ===============================
+    // POST BUILD
+    // ===============================
+    post {
+        success {
+            echo "✅ Pipeline succeeded - Image ${env.IMAGE_TAG} deployed"
+        }
+        failure {
+            echo "❌ Pipeline failed"
+        }
+        not_built {
+            echo "⏭️ Pipeline skipped - [skip ci] detected"
+        }
     }
-}
-
-// ===============================
-// UPDATE HELM VALUES
-// ===============================
-stage('Update Helm Values') {
-
-    withCredentials([
-        usernamePassword(
-            credentialsId: 'github-pat',
-            usernameVariable: 'GITHUB_USER',
-            passwordVariable: 'GITHUB_TOKEN'
-        )
-    ]) {
-
-        sh """
-            git checkout -B main origin/main || git checkout main
-
-            sed -i 's/tag:.*/tag: "${IMAGE_TAG}"/' helm/values.yaml
-
-            git config user.email "saiprasad8112@gmail.com"
-            git config user.name "sesu808"
-
-            git add helm/values.yaml
-
-            if git diff --cached --quiet; then
-                echo "No changes detected"
-                exit 0
-            fi
-
-            git commit -m "[skip ci] Update image tag to ${IMAGE_TAG}"
-
-            git remote set-url origin \
-            https://\$GITHUB_USER:\$GITHUB_TOKEN@github.com/sesu808/kubernates-demo.git
-
-            git push origin HEAD:main
-        """
-    }
-}
-
-// ===============================
-// CLEANUP
-// ===============================
-stage('Cleanup') {
-
-    sh """
-        docker rmi ${IMAGE_FULL} || true
-    """
-}
-
 }
