@@ -10,8 +10,8 @@ image:
   repository: 624858524005.dkr.ecr.ap-south-1.amazonaws.com/sample-app
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion. 
-  tag: "282"
+  # Overrides the image tag whose default is the chart appVersion. :wq
+  tag: " "
 
 spec:
   syncPolicy:
@@ -41,7 +41,7 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
-# This is for setting Kubernetes Annotations to a Pod.
+# This is for setting Kubernetes Annotations to a Pod. 
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 podAnnotations: {}
 # This is for setting Kubernetes Labels to a Pod.
